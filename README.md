@@ -24,27 +24,27 @@ Congratulations on completing the six labs of RSS!
 
 This semester, you've learned how to implement real-time robotics software on a widely-used software framework (ROS). You know how to read sensor data (LiDAR, Camera, Odometry) and convert it into a useful representation of the world (homography, localization). You've written algorithms that make plans over the world's state (parking, line following, path planning) and combined them with controllers (PD control, pure pursuit) to accomplish tasks. 
 
-Now, your team will apply everything you’ve learned to engineer the perfect moon-stealing contraption and out-race your fellow minions to the finish!
+Now, your team will apply everything you’ve learned to outrun Mr. Krabs and steal the Krabby Patty formula!
 
 <img src="media/despicable_me_moon.png" width="500"/>
 
-### Minions… to the moon!
+### Spongebob…!
 
-You have been perfecting your racecar for the last 3 months. Now, it's time to test your supervillain skills! Each team is a group of minions, and you have a task: to steal the moon! There will be two parts to this mission -- first, committing grand larceny by succesfully stealing the shrink ray from Vector, and second, becoming the fastest minion team to reach the moon. 
-  - In Shrink Ray Heist, you will need to navigate safely through Vector's treacherous fortress filled with obstacles to steal the shrink ray
-  - In the Race to the Moon, your team will go head-to-head with other teams to be the fastest to reach the moon without falling off the track
+You have been perfecting your racecar for the last three months. Now, it's time to put your boating skills to the test! Each team will step into the role of SpongeBob, and you have one all-important mission: pass Mrs. Puff’s boating test and finally earn your license. There will be two parts to this challenge —- first, safely navigating through Bikini Bottom while following the rules of the road, and second, becoming the fastest team to complete the Krusty Krab Pizza Delivery challenge.
+  - In Mrs. Puff's Boating School, you will need to navigate safely through Bikini Bottom, obeying all laws of the road without hitting any unsuspecting fishfolk
+  - In Krusty Krab Pizza Delivery, your team will go head-to-head with other teams to be the fastest to deliver Krusty Krab's second ever pizza order without falling off the track
     
-Luckily, through RSS, you’ve learned everything you need to become the ultimate supervillains!
+Luckily, through RSS, you’ve learned everything you need to become the best sponge under the sea!
 
 ### Grading
 
 | Deliverable  Grade | Weighting             |
 |---------------|----------------------------------------------------------------------------|
-| Part A: Shrink Ray Heist (out of 10) | 25% |
-| Part B: Race to the Moon (out of 10) | 35% |
+| Part A: Mrs. Puff's Boating Test (out of 10) | 25% |
+| Part B: Krusty Krab Pizza Delivery (out of 10) | 35% |
 | Briefing Grade (out of 10) | 40% |
 
-## Part A: Shrink Ray Heist <a name="parta"></a>
+## Part A: Mrs. Puff's Boating Test <a name="parta"></a>
 
 <img src="media/vector.png" width="150"/>
 
@@ -54,47 +54,43 @@ Part A is worth 25% of your Final Challenge technical grade. You get 3 attempts 
 
 ### Environment and Task
 
-The Shrink Ray Heist will take place in Vector's fortress (Stata basement). Vector has disassembled the shrink ray into two parts, turned them into **bananas**, and hidden them in separate locations-you’ll need to visit both! Not only that, but to throw off any would-be thieves, he has scattered decoy parts at each site. This means that at each location, you'll need to stop and carefully inspect the parts to find the real components needed to assemble the shrink ray and escape.
+Mrs. Puff's Boating Test will take place in Bikini Bottom (Stata basement). You, as Spongebob, need to pass your 1,258,057th attempt at the boating test and get your license (no loopholes allowed)! This will require you to successfully navigate through the city, avoid pedestrians, and correctly stop for traffic lights and parking meters. 
 
-Your goal, after finishing the race successfully, is to drive through the maze to 2 TA selected locations to pick up shrink ray parts while avoiding detection along the way. Below is a map of Vector's lair with the two shrink ray locations. The exact configuration of locations and surveillance signals is a secret until Heist day; however, the security zones and the appearance of the real shrink ray parts will not change.
-
-Gru, in his infinite wisdom, has already created a ~ machine learning ~ based shrink ray detector for you (located in `/shrinkray_heist`)! It not only tells you if there is a shrink ray part in camera view, but which is the correct one (nifty!). If you don't use it, Gru will be deeply sad that their hard work went to waste, but you are free to modify the code for the detector and add higher level logic to take advantage of it. The documentation can be found [here](shrinkray_heist/README.md)
+Your goal, after finishing the race successfully, is to drive through the course in Stata basement, where you will be asked to park at 2 TA selected locations. At each location, there will be three objects: you must correctly identify either the parking meter or the stop sign, and park in front of it before continuing on your way. Along the way, there will be a traffic light and pedestrian crosswalk as well. The exact configuration of locations and driving signs will be a secret until Test day; however, the location of the pedestrian crosswalk and traffic light will not change. 
 
 Here are the details of the challenge:
 
 * You will be given 2 locations at random via the `basement_point_publisher` node -- see the Stata map for an example of possible locations. We will not assign locations outside of the range of the ones on the map. 
-* You must detect the correct part and each location and "pick it up" (stop for 5 seconds)
-* You should avoid running into guards, hitting obstacles, or otherwise triggering the security system
-* You should escape Vector's fortress and return to the starting location
+* You must detect the correct sign out of the three objects at each location and park in front of it (stop for 5 seconds)
+* You should avoid running the traffic light, taking out pedestrians, or otherwise creating havoc on the road.
+* You should drive Mrs. Puff back to the starting location if possible; this might earn you extra points in her book!
 
 ***!!!UPDATED!!!*** Things to note: 
-* Successful pickup entails stopping within ***1m*** of the banana and saving the image with the bounding box
+* Successful parking entails stopping within ***1m*** in front of the correct item and saving the image with the bounding box
    * If you are having trouble doing both, prioritize ***saving the image***.
-* The bananas will be ***propped up on the ground*** (so homography and YOLO should both work)
+* The signs will be ***propped up on the ground*** or **taped along the bottom of the wall** (so homography and YOLO should both work)
 * You should stop once you see the red light, but you can go once you stop seeing the red light (you ***do not*** need to detect a green light)
 * You can return to start in one of 2 ways:
    * Go back via your original path. In this case, the TA crossing and surveillance light are ***bidirectional*** -- you will need to pass them again.
-   * Go around the map (through the long hallway and vending machines). You will not need to pass the TA crossing and surveillance light again, but the back hallway is difficult to localize in
+   * Go around the map (through the long hallway and vending machines). You will not need to pass the TA crossing and surveillance light again, but this will likely require more robust localization!
 
 <img src="media/Final Challenge Shrinkray Heist Map.png" width="400"/>
 
 ### Scoring:
 
-You will recieve 3 points for each location you successfully reach. At each location, you will recieve 1 point for picking up either the decoy or the shrink ray part, and 1 point for correctly identifying the correct part. If you successfully escape Vector's fortress, you’ll receive 2 bonus points. There will be plenty of obstacles along the way, so plan carefully...
+You will recieve 3 points for each location you successfully reach. At each location, you will recieve 1 point for parking correctly, and 1 point for correctly identifying the correct sign to park in front of. If you successfully drive Mrs. Puff back to the driving school, you’ll receive 2 bonus points. There will be plenty of obstacles along the way, so plan carefully...
 
-`heist_score = 1*(pickup1 + pickup2 + identify1 + identify2) + 3*(loc1 + loc2) + 2*loc1*loc2*start`
+`boating_test_score = 1*(park1 + park2 + identify1 + identify2) + 3*(loc1 + loc2) + 2*loc1*loc2*start`
 
 **Formula for Penalties:**
 
-`penalties =  min(0.5 * detections, 3) + 1 * manual_assist`
+`penalties =  min(0.5 * violations, 3) + 1 * manual_assist`
 
-`detections` is the number of times you trigger Vector's security system. There are a couple ways that can happen:
+`detections` is the number of times you violate a traffic law. There are a couple ways that can happen:
 
-Security Zones: These zones are patrolled by guards (TAs walking back and forth). You’ll need to navigate through them without hitting the guard; otherwise, your operation might be in trouble.
+Pedestrian Crosswalk: The good citizens of Bikini Bottom are going about their day, and often need to cross the street (TAs walking back and forth)! You’ll need to navigate through the city without hitting any pedestrians; otherwise, your boating test might be in trouble.
 
-Surveillance: The signal lights will help you time your movements with the fortress’s surveillance blind spots. Running a red light might alert Vector of your heist!
-
-Obstacles: Various defenses have been scattered throughout the fortress to block your path. Plan your path carefully so you don't get stuck in them.
+Traffic light: Running a red light will likely alarm Mrs. Puff, and hurt your chances of successfully attaining a boating license!
 
 The maximum penalty you can recieve for detections is 3 points.
 
@@ -104,18 +100,18 @@ The formula for calculating score and penalty values may change for fairness (pe
 
 ### Tips
 
-The Shrink Ray Heist is meant to be open-ended. You should make use of techniques you believe will best solve the problem.
+Mrs. Puff's Boating Test is meant to be open-ended. You should make use of techniques you believe will best solve the problem.
 
 Here are some things you may consider in developing your approach:
 
 - How do you implement the high-level logic that combines localization, path-planning, object detection, and collision avoidance?
   - Perhaps a state machine would be helpful--how would you connect the different tasks?
-- How should the speed of your car be adjusted as you detect person/obstacle/light, decide it is close enough, and turn corners?
-- The shrink ray detector is good, but not perfect. What other features might you consider looking for to successfully choose the correct part? 
+- How should the speed of your car be adjusted as you detect pedestrain/light, decide it is close enough, and turn corners?
+- The parking meter detector is good, but not perfect. What other features might you consider looking for to successfully choose the correct part? 
 
 As always, your safety controller should be turned on for this portion of the Final Challenge.
 
-**Staff Recommendations Vector’s Lair**
+**Staff Recommendations: Mrs. Puff's Boating Test**
 
 1. PRIORITIZE CAREFULLY! Successful navigation is critical to the success of your heist, so you may want to start there...
 2. Test often and early. Use unit tests to your advantage (test each module prior to integration), and make sure you test in all areas of the map 
@@ -126,18 +122,18 @@ If you have trouble getting accurate localization, consider:
    2. How are you resampling your particles? Are enough particles being sampled? Are they adequately spread out?
    3. Consider “squashing” your probability distribution as described in the Lab 5 README
 
-## Part B: Race to the Moon <a name="partb"></a>
+## Part B: Krusty Krab Pizza Delivery <a name="partb"></a>
 
 <img src="media/minions-driving.jpg" width="400"/>
 
 ### Environment and Task
 
-The Race to the Moon will take place on the entire Johnson track loop. This is a standard-size 200m track. Cars may be assigned to follow any of the track's six lanes and will be informed of their lane assignment the morning of the race. Lanes are numbered from left to right as shown in the image below.
+The Krusty Krab is delivering its second pizza ever! Mr. Krabs, seeing a promising business venture but concerned following the results of the first attempt, has asked you to deliver it as fast as possible! The Krusty Krab Pizza Delivery will take place on the entire Johnson track loop. This is a standard-size 200m track. Cars may be assigned to follow any of the track's six lanes and will be informed of their lane assignment the morning of the race. Lanes are numbered from left to right as shown in the image below.
 
 <!-- <img src="media/final_race.PNG" width="300" /> -->
 <img src="media/start_area.jpg" width="400"/>
 
-Your car's task is to complete the 200-meter loop around the track as fast as possible, while staying in your assigned lane. Any kind of collision (with another car or with something in Johnson) will seriously jeapordize your mission, and will be penalized heavily. You should have a safety controller running on your car, but be careful that this doesn't stop your car if there is another car driving next to it on the track!
+Your car's task is to complete the 200-meter loop around the track as fast as possible, while staying in your assigned lane. Any kind of collision (with another car or with something in Johnson) will seriously jeapordize your delivery mission, and will be penalized heavily. You should have a safety controller running on your car, but be careful that this doesn't stop your car if there is another car driving next to it on the track!
 
 We have provided images and rosbags of the race track in `/racetrack_images` for easier testing/debugging. 
 
@@ -203,18 +199,18 @@ You are encouraged to build your solution on code written in previous labs! If y
 
 ## FAQ
 
-### Part A: Shrink Ray Heist
+### Part A: Mrs. Puff's Boating School
 
 *How far should the car stop before the lights?*
-* The front of your car must stop between .5-1 meters in front of the surveillance lights to recieve credit for the stop. You must also come to a **full stop**
+* The front of your car must stop between .5-1 meters in front of the traffic light to receive credit for the stop. You must also come to a **full stop**
 
-*What counts as hitting an obstacle or guard?*
+*What counts as hitting an obstacle/pedestrian?*
 * Both head-on collisions and side scrapes will count.
 
-*How should the car "pick up" the correct part?*
-* The car should consider both objects and stop in front of the correct one for at least 5 seconds.
+*How should the car park in front of the correct part?*
+* The car should consider all objects and stop in front of the correct one for at least 5 seconds.
 
-### Part B: Race to the Moon
+### Part B: Krusty Krab Pizza Delivery
 
 *Do we need to design a safety controller for this challenge?* 
 * You should run some kind of safety controller during the challenge, but don't need to spend a lot of time adapting it to the race setting. The easiest way to keep the race collision-free will be for each team to design a robust lane-following solution and remain in-lane. Note: some teams showed solutions in Lab 3 that considered a fixed angle range in front of a car only when deciding when to stop the car. **You should make sure that cars racing alongside yours will not wrongly trigger your safety controller, especially when turning bends in the track!** Consider testing with objects in adjacent lanes.
