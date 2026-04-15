@@ -76,7 +76,7 @@ Part A is worth 35% of your Final Challenge technical grade. Your grade will be 
 
 **Formula for Penalties**
 
-Where `penalties` is calculated as follows:
+The `penalties` term is calculated as follows:
 
   `penalties = 1.5 * num_collisions + 0.5 * num_lane_line_breaches + 0.5 * num_long_breaches`
   
@@ -95,7 +95,7 @@ Here are some things you may consider in developing your approach:
 - How can you obtain information about the lane lines in the world frame?
 - How can you detect if the car has drifted into a neighboring lane?
 
-Please note that Hough Transforms will very likely be useful; helpful resources are [here](https://towardsdatascience.com/lines-detection-with-hough-transform-84020b3b1549) and [here](https://docs.opencv.org/3.4/d9/db0/tutorial_hough_lines.html).
+Please note that Hough Transforms will very likely be useful; helpful resources are [here](https://towardsdatascience.com/tutorial-build-a-lane-detector-679fd8953132/) and [here](https://docs.opencv.org/3.4/d9/db0/tutorial_hough_lines.html).
 
 ## Part B: Mrs. Puff's Boating School <a name="partb"></a>
 
@@ -131,7 +131,7 @@ Here are the details of the challenge:
 
 ### Scoring:
 
-You will recieve 3 points for each location you successfully reach. At each location, you will recieve 1 point for parking correctly, and 1 point for correctly identifying the correct sign to park in front of. If you successfully drive Mrs. Puff back to the driving school, you’ll receive 2 bonus points. There will be plenty of obstacles along the way, so plan carefully...
+You will receive 3 points for each location you successfully reach. At each location, you will receive 1 point for parking correctly, and 1 point for correctly identifying the correct sign to park in front of. If you successfully drive Mrs. Puff back to the driving school, you’ll receive 2 bonus points. There will be plenty of obstacles along the way, so plan carefully...
 
 `boating_test_score = 1*(park1 + park2 + identify1 + identify2) + 3*(loc1 + loc2) + 2*loc1*loc2*start`
 
@@ -211,7 +211,7 @@ You are encouraged to build your solution on code written in previous labs! If y
 ### Part A: The Great Snail Race
 
 *Do we need to design a safety controller for this challenge?* 
-* You should run some kind of safety controller during the challenge, but don't need to spend a lot of time adapting it to the race setting. The easiest way to keep the race collision-free will be for each team to design a robust lane-following solution and remain in-lane. Note: some teams showed solutions in Lab 3 that considered a fixed angle range in front of a car only when deciding when to stop the car. **You should make sure that cars racing alongside yours will not wrongly trigger your safety controller, especially when turning bends in the track!** Consider testing with objects in adjacent lanes.
+* You should run some kind of safety controller during the challenge, but you don't need to spend a lot of time adapting it to the race setting. The easiest way to keep the race collision-free will be for each team to design a robust lane-following solution and remain in-lane. Note: some teams showed solutions in Lab 3 that considered a fixed angle range in front of a car only when deciding when to stop the car. **You should make sure that cars racing alongside yours will not wrongly trigger your safety controller, especially when driving around bends in the track!** Consider testing with objects in adjacent lanes.
 
 *Will we be penalized if another car comes into our lane and we crash?*
 * No. If you stay in your lane, you will not be considered at fault for any collision. We will give every team the opportunity to record three interference-free lap times on race day.
