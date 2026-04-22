@@ -12,7 +12,7 @@ setup(
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
-        (os.path.join('share', package_name, 'launch'), glob('launch/*.py')),
+        (os.path.join('share', package_name, 'launch'), glob('launch/*.xml')),
         (os.path.join('share', package_name, 'final_challenge'), glob('final_challenge/*.py')),
     ],
     install_requires=['setuptools'],

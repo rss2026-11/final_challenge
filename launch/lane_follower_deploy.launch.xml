@@ -1,0 +1,12 @@
+<launch>
+  <!-- Launch the lane follower on the real robot -->
+  
+  <node pkg="safety_controller" name="safety_controller" exec="safety_controller" output="screen">
+  </node>
+
+  <node pkg="final_challenge" name="lane_follower" exec="lane_follower" output="screen">
+    <param name="drive_topic" value="/vesc/low_level/input/navigation" />
+    <param name="speed" value="4.0" />
+    <param name="wheelbase_length" value="0.32" />
+  </node>
+</launch>

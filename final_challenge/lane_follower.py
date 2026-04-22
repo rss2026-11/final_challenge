@@ -30,9 +30,11 @@ class LaneFollower(Node):
 
         self.declare_parameter("speed", 4.0)
         self.declare_parameter("wheelbase_length", 0.32)
+        self.declare_parameter("drive_topic", "/drive")
 
         self.speed = self.get_parameter("speed").get_parameter_value().double_value
         self.wheelbase_length = self.get_parameter("wheelbase_length").get_parameter_value().double_value
+        self.drive_topic = self.get_parameter("drive_topic").get_parameter_value().string_value
 
         self.bridge = CvBridge()
 
@@ -55,7 +57,7 @@ class LaneFollower(Node):
             "/zed/zed_node/rgb/image_rect_color",
             self.image_callback, 10
         )
-        self.drive_pub = self.create_publisher(AckermannDriveStamped, "/drive", 10)
+        self.drive_pub = self.create_publisher(AckermannDriveStamped, self.drive_topic, 10)
         self.debug_pub = self.create_publisher(Image, "/lane_follower/debug", 10)
 
         self.get_logger().info("Lane Follower Initialized")
@@ -78,7 +80,7 @@ class LaneFollower(Node):
 
         height, width, _ = cv_image.shape
 
-        # 1. Computer Vision: Find lane center in image (u, v)
+        # 1. Find lane center in image (u, v)
         hsv = cv2.cvtColor(cv_image, cv2.COLOR_BGR2HSV)
 
         # Range for yellow / white line
@@ -87,7 +89,7 @@ class LaneFollower(Node):
         upper_bound = np.array([179, 70, 255])
         mask = cv2.inRange(hsv, lower_bound, upper_bound)
 
-        # Create ROI (Region of Interest) - lower half of the screen
+        # Create Region of Interest - lower half of the screen
         roi_top = int(height * 0.5)
         roi_mask = np.zeros_like(mask)
         roi_mask[roi_top:height, :] = 255
