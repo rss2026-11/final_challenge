@@ -1,0 +1,45 @@
+<launch>
+  <arg name="params_file" default="$(find-pkg-share final_challenge)/config/part_b_params.yaml"/>
+
+  <!-- ===== EXISTING navigation backbone ===== -->
+  <node pkg="localization" exec="particle_filter" name="particle_filter" output="screen">
+    <param from="$(find-pkg-share path_planning)/config/real/pf_config.yaml"/>
+  </node>
+
+  <node pkg="path_planning" exec="trajectory_planner" name="trajectory_planner" output="screen">
+    <param from="$(find-pkg-share path_planning)/config/real/config.yaml"/>
+  </node>
+
+  <node pkg="path_planning" exec="trajectory_follower" name="trajectory_follower" output="screen">
+    <param from="$(find-pkg-share path_planning)/config/real/config.yaml"/>
+    <param name="drive_topic" value="/drive/nav"/>
+  </node>
+
+  <node pkg="safety_controller" exec="safety_controller" name="safety_controller" output="screen"/>
+
+  <!-- ===== EXISTING Visual_Servoing: pixel->ground + parking control ===== -->
+  <node pkg="visual_servoing" exec="homography_transformer" name="homography_transformer" output="screen"/>
+
+  <node pkg="visual_servoing" exec="parking_controller" name="parking_controller" output="screen">
+    <param name="drive_topic" value="/drive/park"/>
+  </node>
+
+  <!-- ===== NEW Part B perception (single YOLO, 3 outputs) ===== -->
+  <node pkg="final_challenge" exec="yolo_detector" name="yolo_detector" output="screen">
+    <param from="$(var params_file)"/>
+  </node>
+
+  <!-- ===== NEW Part B brain + utilities ===== -->
+  <node pkg="final_challenge" exec="state_machine" name="part_b_state_machine" output="screen">
+    <param from="$(var params_file)"/>
+  </node>
+  <node pkg="final_challenge" exec="image_saver" name="image_saver" output="screen">
+    <param from="$(var params_file)"/>
+  </node>
+
+  <!-- Uncomment for testing without the real basement_point_publisher:
+  <node pkg="final_challenge" exec="shell_point_mock" name="shell_point_mock" output="screen">
+    <param from="$(var params_file)"/>
+  </node>
+  -->
+</launch>

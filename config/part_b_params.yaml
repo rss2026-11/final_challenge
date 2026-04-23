@@ -1,0 +1,30 @@
+part_b_state_machine:
+  ros__parameters:
+    drive_topic_out: "/drive"
+    shell_points_topic: "/shell_points"
+    odom_topic: "/pf/pose/odom"
+    approach_radius: 3.0
+    parked_stable_sec: 2.0
+    park_hold_sec: 5.0
+    return_to_start: true
+    tick_hz: 20.0
+
+yolo_detector:
+  ros__parameters:
+    model: "yolo11n.pt"
+    conf_threshold: 0.3
+    iou_threshold: 0.7
+    image_topic: "/zed/zed_node/rgb/image_rect_color"
+    red_pixel_fraction: 0.08
+    traffic_light_min_area: 200
+    close_bbox_height_frac: 0.35
+
+image_saver:
+  ros__parameters:
+    image_topic: "/part_b/debug_image"
+    save_dir: "saved_parks"
+
+shell_point_mock:
+  ros__parameters:
+    topic: "/shell_points"
+    delay_sec: 2.0
