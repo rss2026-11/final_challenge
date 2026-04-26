@@ -79,9 +79,9 @@ class YoloDetectorNode(Node):
 
     def get_class_color_map(self) -> dict:
         return {
-            "parking meter": (0, 255, 0),
-            "traffic light": (0, 255, 255),
-            "person": (255, 0, 0),
+            "person": (0, 255, 0),          # Green
+            "traffic light": (0, 0, 255),   # Red
+            "parking meter": (255, 0, 0),   # Blue
         }
 
     def on_image(self, msg: Image) -> None:
