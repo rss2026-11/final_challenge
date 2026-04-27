@@ -58,6 +58,9 @@ class YoloAnnotatorNode(Node):
             .double_value
         )
 
+        self.red_pixel_fraction = self.declare_parameter(
+            "red_pixel_fraction", 0.08).get_parameter_value().double_value
+
         self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
         self.model = YOLO(self.model_name)
         self.model.to(self.device)
@@ -83,6 +86,7 @@ class YoloAnnotatorNode(Node):
             Image, "/zed/zed_node/rgb/image_rect_color", self.on_image, 10)
         self.pub = self.create_publisher(
             Image, "/yolo/annotated_image", 10)
+        self.trigger_pub = self.create_publisher(Bool, "/detections/traffic_light_is_red", self._on_red,10)
 
     def get_class_color_map(self) -> dict[str, tuple[int, int, int]]:
         """
@@ -98,8 +102,8 @@ class YoloAnnotatorNode(Node):
             # "chair": (255, 0, 0),
             # "dining table": (0, 255, 0),
             # "laptop": (255, 255, 0), # Cyan
-            "person": (0, 255, 0),          # Green
-            "traffic light": (0, 0, 255),   # Red
+            # "person": (0, 255, 0),          # Green
+            "traffic light": (0, 255, 0),   # Green
             "parking meter": (255, 0, 0),   # Blue
         }
 
@@ -181,6 +185,15 @@ class YoloAnnotatorNode(Node):
            
 
         return detections
+    
+    def _is_red(self, image: np.ndarray) -> bool:
+        if image.size == 0:
+            return False
+        hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+        m1 = cv2.inRange(hsv, np.array([0, 100, 100]), np.array([10, 255, 255]))
+        m2 = cv2.inRange(hsv, np.array([160, 100, 100]), np.array([179, 255, 255]))
+        red = m1 | m2
+        return (float(np.count_nonzero(red)) / float(red.size)) > self.red_pixel_fraction
 
     def draw_detections(
         self,
@@ -195,6 +208,7 @@ class YoloAnnotatorNode(Node):
             top_left = (int(det.x1), int(det.y1))
             bottom_right = (int(det.x2), int(det.y2))
 
+            
             # TODO: Draw the bounding box around the detection to the output image.
             #       Use the colors you specified per class in `get_class_color_map`
             #       by accessing the self.class_color_map dictionary.
@@ -228,7 +242,13 @@ class YoloAnnotatorNode(Node):
                 cv2.LINE_AA              # anti-aliased text
             )
 
+            if det.class_name == "traffic light":
+                if self._is_red(out_image):
+                    self.trigger_pub.publish(True)
+                        
 
+                # take photo
+                # pass
 
         return out_image
 
@@ -402,14 +422,7 @@ def main() -> None:
 
 #         return out_image
 
-#     def _is_red(self, crop: np.ndarray) -> bool:
-#         if crop.size == 0:
-#             return False
-#         hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
-#         m1 = cv2.inRange(hsv, np.array([0, 100, 100]), np.array([10, 255, 255]))
-#         m2 = cv2.inRange(hsv, np.array([160, 100, 100]), np.array([179, 255, 255]))
-#         red = m1 | m2
-#         return (float(np.count_nonzero(red)) / float(red.size)) > self.red_pixel_fraction
+    
 
 
 # def main() -> None:
