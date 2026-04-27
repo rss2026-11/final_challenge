@@ -10,7 +10,7 @@ import math
 from sensor_msgs.msg import Image
 from ackermann_msgs.msg import AckermannDriveStamped
 
-# Homography calibration points
+# Homography calibration points (used by both pipelines for control)
 PTS_IMAGE_PLANE = [[195, 278],
                    [475, 290],
                    [245, 223],
@@ -22,6 +22,19 @@ PTS_GROUND_PLANE = [[24, 12],
                     [48, -12]]
 
 METERS_PER_INCH = 0.0254
+
+# ── BEV constants ──────────────────────────────────────────────────────────────
+# Source trapezoid as fractions of (width, height): top-left, top-right,
+# bottom-right, bottom-left.  Tune these so the trapezoid wraps the lane
+# region visible directly in front of the car.
+BEV_SRC_FRAC = np.float32([
+    [0.25, 0.51],   # top-left
+    [0.95, 0.51],   # top-right
+    [1.00, 0.79],   # bottom-right
+    [0.05, 0.79],   # bottom-left
+])
+BEV_W, BEV_H = 320, 240   # output bird's-eye image size (pixels)
+# ──────────────────────────────────────────────────────────────────────────────
 
 
 class LaneFollower(Node):
@@ -36,7 +49,7 @@ class LaneFollower(Node):
 
         self.bridge = CvBridge()
 
-        # Setup homography matrix
+        # Setup homography matrix (image → ground, used for pure pursuit)
         np_pts_ground = np.array(PTS_GROUND_PLANE) * METERS_PER_INCH
         np_pts_ground = np.float32(np_pts_ground[:, np.newaxis, :])
 
@@ -49,6 +62,14 @@ class LaneFollower(Node):
         else:
             self.get_logger().info("Homography Transformer Initialized")
 
+        # BEV warp matrices — built lazily on first frame (need image size)
+        self.M_bev = None
+        self.M_bev_inv = None
+
+        # Last valid lane detections — used when a frame misses a line
+        self.last_left  = None   # (s, b) of averaged left line
+        self.last_right = None   # (s, b) of averaged right line
+
         # ROS Publishers and Subscribers
         self.image_sub = self.create_subscription(
             Image,
@@ -57,6 +78,10 @@ class LaneFollower(Node):
         )
         self.drive_pub = self.create_publisher(AckermannDriveStamped, "/drive", 10)
         self.debug_pub = self.create_publisher(Image, "/lane_follower/debug", 10)
+        self.bev_pub   = self.create_publisher(Image, "/lane_follower/bev_debug", 10)
+
+        self.smooth_target_u = None
+        self.alpha = 0.15
 
         self.get_logger().info("Lane Follower Initialized")
 
@@ -78,87 +103,195 @@ class LaneFollower(Node):
 
         height, width, _ = cv_image.shape
 
-        # 1. Computer Vision: Find lane center in image (u, v)
-        hsv = cv2.cvtColor(cv_image, cv2.COLOR_BGR2HSV)
+        # Build BEV warp matrices once we know the image size
+        if self.M_bev is None:
+            src = BEV_SRC_FRAC * np.array([width, height], dtype=np.float32)
+            dst = np.float32([[0, 0], [BEV_W, 0], [BEV_W, BEV_H], [0, BEV_H]])
+            self.M_bev     = cv2.getPerspectiveTransform(src, dst)
+            self.M_bev_inv = cv2.getPerspectiveTransform(dst, src)
 
-        # Range for yellow / white line
-        # This mask often needs to be tuned on race day
-        lower_bound = np.array([0, 0, 180])
-        upper_bound = np.array([179, 70, 255])
+        # ── Color mask (shared by both pipelines) ─────────────────────────────
+        hsv = cv2.cvtColor(cv_image, cv2.COLOR_BGR2HSV)
+        lower_bound = np.array([50, 0, 200])
+        upper_bound = np.array([100, 43, 255])
         mask = cv2.inRange(hsv, lower_bound, upper_bound)
 
-        # Create ROI (Region of Interest) - lower half of the screen
+        # ROI: lower half only
         roi_top = int(height * 0.5)
         roi_mask = np.zeros_like(mask)
         roi_mask[roi_top:height, :] = 255
-        masked_img = cv2.bitwise_and(mask, roi_mask)
+        mask = cv2.bitwise_and(mask, roi_mask)
+        # ──────────────────────────────────────────────────────────────────────
 
-        # Edge detection
-        edges = cv2.Canny(masked_img, 50, 150)
+        # =======================================================================
+        # OLD PIPELINE — perspective Hough lines (commented out)
+        # =======================================================================
+        # edges = cv2.Canny(mask, 50, 150)
+        # lines = cv2.HoughLinesP(edges, 1, np.pi/180, threshold=50, minLineLength=50, maxLineGap=40)
+        #
+        # target_u = int(width / 2)
+        # target_v = int(height * 0.7)
+        #
+        # if lines is not None:
+        #     left_lines = []
+        #     right_lines = []
+        #
+        #     for line in lines:
+        #         x1, y1, x2, y2 = line[0]
+        #         if x2 == x1: continue
+        #         slope = (y2 - y1) / (x2 - x1)
+        #         if abs(slope) < 0.3 or abs(slope) > 10:
+        #             continue
+        #         x_center = (x1 + x2) / 2
+        #         if x_center < width / 2:
+        #             left_lines.append(line)
+        #         else:
+        #             right_lines.append(line)
+        #
+        #     left_u_avg = None
+        #     right_u_avg = None
+        #
+        #     if left_lines:
+        #         left_u_pts = []
+        #         for line in left_lines:
+        #             x1, y1, x2, y2 = line[0]
+        #             cv2.line(cv_image, (x1, y1), (x2, y2), (255, 0, 0), 3)
+        #             slope = (y2 - y1) / (x2 - x1)
+        #             intercept = y1 - slope * x1
+        #             if slope != 0:
+        #                 left_u_pts.append((target_v - intercept) / slope)
+        #         left_u_avg = np.mean(left_u_pts)
+        #
+        #     if right_lines:
+        #         right_u_pts = []
+        #         for line in right_lines:
+        #             x1, y1, x2, y2 = line[0]
+        #             cv2.line(cv_image, (x1, y1), (x2, y2), (0, 0, 255), 3)
+        #             slope = (y2 - y1) / (x2 - x1)
+        #             intercept = y1 - slope * x1
+        #             if slope != 0:
+        #                 right_u_pts.append((target_v - intercept) / slope)
+        #         right_u_avg = np.mean(right_u_pts)
+        #
+        #     if left_u_avg is not None and right_u_avg is not None:
+        #         target_u = int((left_u_avg + right_u_avg) / 2)
+        #     elif left_u_avg is not None:
+        #         lane_width_px = 300
+        #         target_u = int(left_u_avg + lane_width_px / 2)
+        #     elif right_u_avg is not None:
+        #         lane_width_px = 300
+        #         target_u = int(right_u_avg - lane_width_px / 2)
+        # =======================================================================
 
-        # Hough Transform
-        lines = cv2.HoughLinesP(edges, 1, np.pi/180, threshold=50, minLineLength=50, maxLineGap=40)
+        # =======================================================================
+        # NEW PIPELINE — trapezoid ROI + Hough lines (hybrid approach)
+        # Use the BEV trapezoid as a polygon mask, detect Hough lines inside it
+        # in perspective space so lines naturally follow curves.
+        # =======================================================================
+        trap_pts = (BEV_SRC_FRAC * np.array([width, height], dtype=np.float32)).astype(np.int32)
+        poly_mask = np.zeros_like(mask)
+        cv2.fillPoly(poly_mask, [trap_pts], 255)
+        masked = cv2.bitwise_and(mask, poly_mask)
+
+        edges = cv2.Canny(masked, 50, 150)
+        lines = cv2.HoughLinesP(edges, 1, np.pi / 180, threshold=30, minLineLength=30, maxLineGap=40)
 
         target_u = int(width / 2)
-        target_v = int(height * 0.7) # Lookahead scanline
+        target_v = int(height * 0.65)
+
+        left_lines = []
+        right_lines = []
 
         if lines is not None:
-            left_lines = []
-            right_lines = []
-
             for line in lines:
                 x1, y1, x2, y2 = line[0]
-                if x2 == x1: continue
-                slope = (y2 - y1) / (x2 - x1)
-
-                # Filter out horizontal/vertical lines
-                if abs(slope) < 0.2 or abs(slope) > 10:
+                if x2 == x1:
                     continue
-
-                if slope < 0:
+                slope = (y2 - y1) / (x2 - x1)
+                if abs(slope) < 0.3 or abs(slope) > 10:
+                    continue
+                if (x1 + x2) / 2 < width / 2:
                     left_lines.append(line)
                 else:
                     right_lines.append(line)
 
-            # Draw lines and determine target
-            left_u_avg = None
-            right_u_avg = None
+        def averaged_line(line_group, img_h):
+            """Average a group of lines into one and extend it top-to-bottom."""
+            slopes, intercepts = [], []
+            for line in line_group:
+                x1, y1, x2, y2 = line[0]
+                if x2 == x1:
+                    continue
+                s = (y2 - y1) / (x2 - x1)
+                slopes.append(s)
+                intercepts.append(y1 - s * x1)
+            s = np.mean(slopes)
+            b = np.mean(intercepts)
+            y_bot = img_h
+            y_top = int(img_h * 0.4)
+            x_bot = int((y_bot - b) / s)
+            x_top = int((y_top - b) / s)
+            return (x_bot, y_bot), (x_top, y_top), s, b
 
-            if left_lines:
-                left_u_pts = []
-                for line in left_lines:
-                    x1, y1, x2, y2 = line[0]
-                    cv2.line(cv_image, (x1, y1), (x2, y2), (255, 0, 0), 3) # Blue for left
-                    slope = (y2 - y1) / (x2 - x1)
-                    intercept = y1 - slope * x1
-                    if slope != 0:
-                        left_u_pts.append((target_v - intercept) / slope)
-                left_u_avg = np.mean(left_u_pts)
+        s_left = b_left = s_right = b_right = None
+        left_u_avg = right_u_avg = None
 
-            if right_lines:
-                right_u_pts = []
-                for line in right_lines:
-                    x1, y1, x2, y2 = line[0]
-                    cv2.line(cv_image, (x1, y1), (x2, y2), (0, 0, 255), 3) # Red for right
-                    slope = (y2 - y1) / (x2 - x1)
-                    intercept = y1 - slope * x1
-                    if slope != 0:
-                        right_u_pts.append((target_v - intercept) / slope)
-                right_u_avg = np.mean(right_u_pts)
+        if left_lines:
+            _, _, s_left, b_left = averaged_line(left_lines, height)
+            self.last_left = (s_left, b_left)    # store for next frame
+        elif self.last_left is not None:
+            s_left, b_left = self.last_left       # reuse last known
 
-            # Determine Target Point
-            if left_u_avg is not None and right_u_avg is not None:
-                # We have both lane lines
-                target_u = int((left_u_avg + right_u_avg) / 2)
-            elif left_u_avg is not None:
-                # We only see left line, estimate right line distance
-                lane_width_px = 300 # highly dependent on height/calibration
-                target_u = int(left_u_avg + lane_width_px / 2)
-            elif right_u_avg is not None:
-                lane_width_px = 300
-                target_u = int(right_u_avg - lane_width_px / 2)
+        if right_lines:
+            _, _, s_right, b_right = averaged_line(right_lines, height)
+            self.last_right = (s_right, b_right)
+        elif self.last_right is not None:
+            s_right, b_right = self.last_right
 
-        # Draw target dot
+        if s_left is not None and b_left is not None:
+            y_bot, y_top = height, int(height * 0.4)
+            x_bot = int((y_bot - b_left) / s_left)
+            x_top = int((y_top - b_left) / s_left)
+            cv2.line(cv_image, (x_bot, y_bot), (x_top, y_top), (255, 0, 0), 3)
+            if s_left != 0:
+                left_u_avg = (target_v - b_left) / s_left
+
+        if s_right is not None and b_right is not None:
+            y_bot, y_top = height, int(height * 0.4)
+            x_bot = int((y_bot - b_right) / s_right)
+            x_top = int((y_top - b_right) / s_right)
+            cv2.line(cv_image, (x_bot, y_bot), (x_top, y_top), (0, 0, 255), 3)
+            if s_right != 0:
+                right_u_avg = (target_v - b_right) / s_right
+
+        ASSUMED_LANE_W_PX = 300
+        if left_u_avg is not None and right_u_avg is not None:
+            target_u = int((left_u_avg + right_u_avg) / 2)
+        elif left_u_avg is not None:
+            target_u = int(left_u_avg + ASSUMED_LANE_W_PX / 2)
+        elif right_u_avg is not None:
+            target_u = int(right_u_avg - ASSUMED_LANE_W_PX / 2)
+
+        # Draw trapezoid
+        cv2.polylines(cv_image, [trap_pts], isClosed=True, color=(0, 255, 0), thickness=2)
+
+        # Draw magenta center line from the intersection of blue+red downward
+        if s_left is not None and s_right is not None and s_left != s_right:
+            # Intersection of the two lane lines (the vanishing point)
+            x_int = int((b_right - b_left) / (s_left - s_right))
+            y_int = int(s_left * x_int + b_left)
+            cv2.line(cv_image, (x_int, y_int), (target_u, height), (255, 0, 255), 3)
+            # Place the target dot on the magenta line at target_v
+            if height != y_int:
+                t = (target_v - y_int) / (height - y_int)
+                target_u = int(x_int + t * (target_u - x_int))
+        else:
+            # Fallback when only one lane visible: vertical line
+            cv2.line(cv_image, (target_u, int(height * 0.4)), (target_u, height), (255, 0, 255), 3)
+        # =======================================================================
+
+
+        # Draw target dot on original image
         cv2.circle(cv_image, (target_u, target_v), 8, (0, 255, 0), -1)
 
         # Debug Publishing
@@ -167,28 +300,27 @@ class LaneFollower(Node):
         except:
             pass
 
-        # 2. Homography
+        # ── Homography → ground coordinates ───────────────────────────────────
         x_local, y_local = self.transformUvToXy(target_u, target_v)
 
-        # 3. Pure Pursuit
+        # ── Pure Pursuit ───────────────────────────────────────────────────────
         L_d = math.sqrt(x_local**2 + y_local**2)
         if L_d < 0.05:
-            L_d = 0.05 # Prevent divide by zero
+            L_d = 0.05
 
         curvature = (2.0 * y_local) / (L_d**2)
         steering_angle = math.atan(curvature * self.wheelbase_length)
 
-        # Cap Steering to realistic angles
         max_steer = 0.6
         steering_angle = max(min(steering_angle, max_steer), -max_steer)
 
-        # Publish Drive Command
         drive_msg = AckermannDriveStamped()
         drive_msg.header.stamp = self.get_clock().now().to_msg()
         drive_msg.header.frame_id = "base_link"
         drive_msg.drive.speed = self.speed
         drive_msg.drive.steering_angle = steering_angle
         self.drive_pub.publish(drive_msg)
+
 
 def main(args=None):
     rclpy.init(args=args)
