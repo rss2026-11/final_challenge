@@ -39,7 +39,7 @@ class Detection:
 
 class YoloAnnotatorNode(Node):
     def __init__(self) -> None:
-        super().__init__("yolo_annotator")
+        super().__init__("yolo_detector")
 
         # Declare and get ROS parameters
         self.model_name = (
