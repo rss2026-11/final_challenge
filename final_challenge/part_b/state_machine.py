@@ -25,7 +25,7 @@ import rclpy
 from rclpy.node import Node
 
 from ackermann_msgs.msg import AckermannDriveStamped
-from geometry_msgs.msg import PoseArray, PoseStamped
+from geometry_msgs.msg import PoseArray, PoseStamped, PointStamped
 from nav_msgs.msg import Odometry
 from std_msgs.msg import Bool, String
 from vs_msgs.msg import ConeLocationPixel
@@ -48,7 +48,7 @@ class StateMachine(Node):
         super().__init__("part_b_state_machine")
 
         self.declare_parameter("drive_topic_out", "/vesc/low_level/input/navigation")
-        self.declare_parameter("shell_points_topic", "/shell_points")
+        # self.declare_parameter("shell_points_topic", "/shell_points")
         self.declare_parameter("odom_topic", "/pf/pose/odom")
         self.declare_parameter("approach_radius", 3.0)
         self.declare_parameter("parked_stable_sec", 2.0)
@@ -57,7 +57,7 @@ class StateMachine(Node):
         self.declare_parameter("tick_hz", 20.0)
 
         self.drive_topic_out = self.get_parameter("drive_topic_out").get_parameter_value().string_value
-        shell_topic = self.get_parameter("shell_points_topic").get_parameter_value().string_value
+        # shell_topic = self.get_parameter("shell_points_topic").get_parameter_value().string_value
         odom_topic = self.get_parameter("odom_topic").get_parameter_value().string_value
         self.approach_radius = self.get_parameter("approach_radius").get_parameter_value().double_value
         self.parked_stable = self.get_parameter("parked_stable_sec").get_parameter_value().double_value
@@ -79,16 +79,17 @@ class StateMachine(Node):
         self.zero_drive_since = None
 
         self.drive_pub = self.create_publisher(AckermannDriveStamped, self.drive_topic_out, 1)
-        self.goal_pub = self.create_publisher(PoseStamped, "/clicked_point", 1)
+        self.goal_pub = self.create_publisher(PoseStamped, "/goal_pose", 1)
         self.state_pub = self.create_publisher(String, "/part_b/state", 1)
         self.trigger_pub = self.create_publisher(String, "/part_b/park_trigger", 10)
 
-        self.create_subscription(PoseArray, shell_topic, self._on_shell_points, 10)
+        # self.create_subscription(PoseArray, shell_topic, self._on_shell_points, 10)
         self.create_subscription(Odometry, odom_topic, self._on_odom, 10)
         self.create_subscription(AckermannDriveStamped, "/vesc/high_level/input/nav_0", self._on_nav, 1)
         self.create_subscription(AckermannDriveStamped, "/vesc/high_level/input/nav_1", self._on_park, 1)
         self.create_subscription(Bool, "/detections/traffic_light_is_red", self._on_red, 10)
         self.create_subscription(ConeLocationPixel, "/relative_cone_px", self._on_parking_meter, 10)
+        self.create_subscription(PointStamped, "/clicked_point", self._on_clicked_point, 10)
 
         self.create_timer(period, self._tick)
         self.get_logger().info("part_b_state_machine ready")
@@ -100,7 +101,7 @@ class StateMachine(Node):
         return self._now() - self.state_entered
 
     def _transition(self, new):
-        self.get_logger().info(f"STATE: {self.state.name} -> {new.name}")
+        self.get_logger().info(f"\n====================================\n[STATE SWITCH] {self.state.name} -> {new.name}\n====================================")
         self.state = new
         self.state_entered = self._now()
         self.goal_sent_for = None
@@ -137,9 +138,9 @@ class StateMachine(Node):
         m.drive = src.drive
         self.drive_pub.publish(m)
 
-    def _on_shell_points(self, msg):
-        self.goals = [(p.position.x, p.position.y) for p in msg.poses]
-        self.get_logger().info(f"shell points: {self.goals}")
+    # def _on_shell_points(self, msg):
+    #     self.goals = [(p.position.x, p.position.y) for p in msg.poses]
+    #     self.get_logger().info(f"shell points: {self.goals}")
 
     def _on_odom(self, msg):
         self.current_pose = (msg.pose.pose.position.x, msg.pose.pose.position.y)
@@ -162,6 +163,11 @@ class StateMachine(Node):
 
     def _on_parking_meter(self, msg):
         self.parking_meter_last_seen = self._now()
+
+    def _on_clicked_point(self, msg):
+        if self.state in (S.INIT, S.WAIT_GOALS) and len(self.goals) < 2:
+            self.goals.append((msg.point.x, msg.point.y))
+            self.get_logger().info(f"Received RViz click {len(self.goals)} of 2: ({msg.point.x:.2f}, {msg.point.y:.2f})")
 
     def _nav_to(self, goal_xy, next_state, final=False):
         if goal_xy is None or self.current_pose is None:
