@@ -28,7 +28,7 @@ from ackermann_msgs.msg import AckermannDriveStamped
 from geometry_msgs.msg import PoseArray, PoseStamped
 from nav_msgs.msg import Odometry
 from std_msgs.msg import Bool, String
-
+from vs_msgs.msg import ConeLocationPixel
 
 class S(Enum):
     INIT = auto()
@@ -73,7 +73,7 @@ class StateMachine(Node):
         self.latest_nav_drive = None
         self.latest_park_drive = None
         self.red_light = False
-        self.ped_close = False
+        self.parking_meter_last_seen = 0.0
         self.goal_sent_for = None
         self.trigger_sent_for = None
         self.zero_drive_since = None
@@ -88,7 +88,7 @@ class StateMachine(Node):
         self.create_subscription(AckermannDriveStamped, "/drive/nav", self._on_nav, 1)
         self.create_subscription(AckermannDriveStamped, "/drive/park", self._on_park, 1)
         self.create_subscription(Bool, "/detections/traffic_light_is_red", self._on_red, 10)
-        self.create_subscription(Bool, "/detections/pedestrian_close", self._on_ped, 10)
+        self.create_subscription(ConeLocationPixel, "/relative_cone_px", self._on_parking_meter, 10)
 
         self.create_timer(period, self._tick)
         self.get_logger().info("part_b_state_machine ready")
@@ -160,8 +160,44 @@ class StateMachine(Node):
     def _on_red(self, msg):
         self.red_light = bool(msg.data)
 
-    def _on_ped(self, msg):
-        self.ped_close = bool(msg.data)
+    def _on_parking_meter(self, msg):
+        self.parking_meter_last_seen = self._now()
+
+    def _nav_to(self, goal_xy, next_state, final=False):
+        if goal_xy is None or self.current_pose is None:
+            self._publish_stop()
+            return
+        if self.goal_sent_for != self.state:
+            self._send_goal(goal_xy)
+        self._forward(self.latest_nav_drive)
+        d = self._dist(self.current_pose, goal_xy)
+
+        if final:
+            # Returning to start
+            if d < 1.0:
+                self._transition(next_state)
+        else:
+            # HYBRID TRANSITION: Must be close to TA coordinate AND see the meter
+            in_range = d < self.approach_radius
+            meter_visible = (self._now() - self.parking_meter_last_seen) < 0.5
+
+            if in_range and meter_visible:
+                self._transition(next_state)
+
+    def _approach(self, next_state):
+        self._forward(self.latest_park_drive)
+        if self._parked_stable_met():
+            self._transition(next_state)
+
+    def _parked(self, label, next_state):
+        self._publish_stop()
+        held = self._in_state_for()
+        if held > 0.5 and self.trigger_sent_for != self.state:
+            self.trigger_pub.publish(String(data=label))
+            self.trigger_sent_for = self.state
+            self.get_logger().info(f"park image trigger: {label}")
+        if held >= self.park_hold:
+            self._transition(next_state)
 
     def _parked_stable_met(self):
         return (self.zero_drive_since is not None and
@@ -172,7 +208,7 @@ class StateMachine(Node):
 
         active = self.state in (
             S.NAV_1, S.APPROACH_1, S.NAV_2, S.APPROACH_2, S.RETURN)
-        if active and (self.red_light or self.ped_close):
+        if active and self.red_light:
             self._publish_stop()
             return
 
@@ -211,32 +247,7 @@ class StateMachine(Node):
         elif self.state == S.DONE:
             self._publish_stop()
 
-    def _nav_to(self, goal_xy, next_state, final=False):
-        if goal_xy is None or self.current_pose is None:
-            self._publish_stop()
-            return
-        if self.goal_sent_for != self.state:
-            self._send_goal(goal_xy)
-        self._forward(self.latest_nav_drive)
-        d = self._dist(self.current_pose, goal_xy)
-        thresh = 1.0 if final else self.approach_radius
-        if d < thresh:
-            self._transition(next_state)
 
-    def _approach(self, next_state):
-        self._forward(self.latest_park_drive)
-        if self._parked_stable_met():
-            self._transition(next_state)
-
-    def _parked(self, label, next_state):
-        self._publish_stop()
-        held = self._in_state_for()
-        if held > 0.5 and self.trigger_sent_for != self.state:
-            self.trigger_pub.publish(String(data=label))
-            self.trigger_sent_for = self.state
-            self.get_logger().info(f"park image trigger: {label}")
-        if held >= self.park_hold:
-            self._transition(next_state)
 
 
 def main(args=None):
