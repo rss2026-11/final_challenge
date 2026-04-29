@@ -47,7 +47,7 @@ class StateMachine(Node):
     def __init__(self):
         super().__init__("part_b_state_machine")
 
-        self.declare_parameter("drive_topic_out", "/drive")
+        self.declare_parameter("drive_topic_out", "/vesc/low_level/input/navigation")
         self.declare_parameter("shell_points_topic", "/shell_points")
         self.declare_parameter("odom_topic", "/pf/pose/odom")
         self.declare_parameter("approach_radius", 3.0)
@@ -79,14 +79,14 @@ class StateMachine(Node):
         self.zero_drive_since = None
 
         self.drive_pub = self.create_publisher(AckermannDriveStamped, self.drive_topic_out, 1)
-        self.goal_pub = self.create_publisher(PoseStamped, "/goal_pose", 1)
+        self.goal_pub = self.create_publisher(PoseStamped, "/clicked_point", 1)
         self.state_pub = self.create_publisher(String, "/part_b/state", 1)
         self.trigger_pub = self.create_publisher(String, "/part_b/park_trigger", 10)
 
         self.create_subscription(PoseArray, shell_topic, self._on_shell_points, 10)
         self.create_subscription(Odometry, odom_topic, self._on_odom, 10)
-        self.create_subscription(AckermannDriveStamped, "/drive/nav", self._on_nav, 1)
-        self.create_subscription(AckermannDriveStamped, "/drive/park", self._on_park, 1)
+        self.create_subscription(AckermannDriveStamped, "/vesc/high_level/input/nav_0", self._on_nav, 1)
+        self.create_subscription(AckermannDriveStamped, "/vesc/high_level/input/nav_1", self._on_park, 1)
         self.create_subscription(Bool, "/detections/traffic_light_is_red", self._on_red, 10)
         self.create_subscription(ConeLocationPixel, "/relative_cone_px", self._on_parking_meter, 10)
 
