@@ -3,4 +3,5 @@
         <param name="speed" value="2.0"/>
         <param name="wheelbase_length" value="0.32"/>
     </node>
+    <node pkg="safety_controller" exec="safety_controller" name="safety_controller" output="screen"/>
 </launch>
