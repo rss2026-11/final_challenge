@@ -76,7 +76,7 @@ class LaneFollower(Node):
             "/zed/zed_node/rgb/image_rect_color",
             self.image_callback, 10
         )
-        self.drive_pub = self.create_publisher(AckermannDriveStamped, "/vesc/high_level/input/navigation", 10)
+        self.drive_pub = self.create_publisher(AckermannDriveStamped, "/vesc/high_level/input/nav_0", 10)
         self.debug_pub = self.create_publisher(Image, "/lane_follower/debug", 10)
         self.bev_pub   = self.create_publisher(Image, "/lane_follower/bev_debug", 10)
 
