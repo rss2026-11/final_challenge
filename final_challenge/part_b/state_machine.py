@@ -47,7 +47,7 @@ class StateMachine(Node):
     def __init__(self):
         super().__init__("part_b_state_machine")
 
-        self.declare_parameter("drive_topic_out", "/vesc/low_level/input/navigation")
+        self.declare_parameter("drive_topic_out", "/vesc/high_level/input/navigation")
         # self.declare_parameter("shell_points_topic", "/shell_points")
         self.declare_parameter("odom_topic", "/pf/pose/odom")
         self.declare_parameter("approach_radius", 3.0)
@@ -85,8 +85,8 @@ class StateMachine(Node):
 
         # self.create_subscription(PoseArray, shell_topic, self._on_shell_points, 10)
         self.create_subscription(Odometry, odom_topic, self._on_odom, 10)
-        self.create_subscription(AckermannDriveStamped, "/vesc/high_level/input/nav_0", self._on_nav, 1)
-        self.create_subscription(AckermannDriveStamped, "/vesc/high_level/input/nav_1", self._on_park, 1)
+        self.create_subscription(AckermannDriveStamped, "/vesc/high_level/input/nav_1", self._on_nav, 1)
+        self.create_subscription(AckermannDriveStamped, "/vesc/high_level/input/nav_2", self._on_park, 1)
         self.create_subscription(Bool, "/detections/traffic_light_is_red", self._on_red, 10)
         self.create_subscription(ConeLocationPixel, "/relative_cone_px", self._on_parking_meter, 10)
         self.create_subscription(PointStamped, "/clicked_point", self._on_clicked_point, 10)
