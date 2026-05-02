@@ -26,6 +26,7 @@ from rclpy.node import Node
 
 from ackermann_msgs.msg import AckermannDriveStamped
 from geometry_msgs.msg import PoseArray, PoseStamped
+from geometry_msgs.msg import PointStamped
 from nav_msgs.msg import Odometry
 from std_msgs.msg import Bool, String
 
@@ -83,7 +84,9 @@ class StateMachine(Node):
         self.state_pub = self.create_publisher(String, "/part_b/state", 1)
         self.trigger_pub = self.create_publisher(String, "/part_b/park_trigger", 10)
 
-        self.create_subscription(PoseArray, shell_topic, self._on_shell_points, 10)
+        # self.create_subscription(PoseArray, shell_topic, self._on_shell_points, 10)
+        self.create_subscription(PointStamped, "/clicked_point", self._on_clicked_point, 10)
+
         self.create_subscription(Odometry, odom_topic, self._on_odom, 10)
         self.create_subscription(AckermannDriveStamped, "/drive/nav", self._on_nav, 1)
         self.create_subscription(AckermannDriveStamped, "/drive/park", self._on_park, 1)
@@ -148,6 +151,16 @@ class StateMachine(Node):
 
     def _on_nav(self, msg):
         self.latest_nav_drive = msg
+
+    # new function for clicks
+    def _on_clicked_point(self, msg):
+        if self.state in (S.INIT, S.WAIT_GOALS) and len(self.goals) < 2:
+            self.goals.append((msg.point.x, msg.point.y))
+            self.get_logger().info(
+                f"Received RViz click {len(self.goals)} of 2: "
+                f"({msg.point.x:.2f}, {msg.point.y:.2f})"
+            )
+
 
     def _on_park(self, msg):
         self.latest_park_drive = msg
