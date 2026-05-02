@@ -48,7 +48,6 @@ class StateMachine(Node):
     def __init__(self):
         super().__init__("part_b_state_machine")
 
-        self.declare_parameter("drive_topic_out", "/drive")
         self.declare_parameter("shell_points_topic", "/shell_points")
         self.declare_parameter("odom_topic", "/pf/pose/odom")
         self.declare_parameter("approach_radius", 3.0)
