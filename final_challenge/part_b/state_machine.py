@@ -79,6 +79,7 @@ class StateMachine(Node):
         self.latest_nav_drive = None
         self.latest_park_drive = None
         self.red_light = False
+        self.was_red_light = False
         self.parking_meter_last_seen = 0.0
         self.goal_sent_for = None
         self.trigger_sent_for = None
@@ -172,7 +173,11 @@ class StateMachine(Node):
 
     def _on_red(self, msg):
         self.red_light = bool(msg.data)
-        self.get_logger().info('Red Light')
+        if self.red_light and not self.was_red_light:
+            self.get_logger().info("🛑 RED LIGHT DETECTED! Stopping car...")
+        elif not self.red_light and self.was_red_light:
+            self.get_logger().info("🟢 GREEN LIGHT! Resuming...")
+        self.was_red_light = self.red_light
 
     def _on_parking_meter(self, msg):
         self.parking_meter_last_seen = self._now()
