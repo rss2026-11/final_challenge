@@ -143,7 +143,7 @@ class StateMachine(Node):
         m.header.frame_id = "base_link"
         m.drive.speed = 0.0
         m.drive.steering_angle = 0.0
-        
+
         if emergency:
             self.safety_pub.publish(m)
         else:
@@ -181,7 +181,7 @@ class StateMachine(Node):
 
     def _on_red(self, msg):
         current_red = bool(msg.data)
-        
+
         if current_red:
             self.last_red_time = self._now()
             self.red_light = True
@@ -231,7 +231,7 @@ class StateMachine(Node):
         self._forward(self.latest_park_drive)
 
         # Transition based on distance to cone
-        if self.cone_distance is not None and self.cone_distance < 0.75:
+        if self.cone_distance is not None and self.cone_distance < 0.9:
             self.get_logger().info(f"Target distance reached: {self.cone_distance:.2f}m. Parking!")
             self._transition(next_state)
             return
@@ -300,7 +300,7 @@ class StateMachine(Node):
             self._parked("location_1", next_state=S.BACKUP_1)
 
         elif self.state == S.BACKUP_1:
-            self._backup(distance=0.5, speed=-0.5, next_state=S.NAV_2)
+            self._backup(distance=0.5, speed=-1.0, next_state=S.NAV_2)
 
         elif self.state == S.NAV_2:
             self._nav_to(self.goals[1], next_state=S.APPROACH_2)
@@ -313,7 +313,7 @@ class StateMachine(Node):
             self._parked("location_2", next_state=nxt)
 
         elif self.state == S.BACKUP_2:
-            self._backup(distance=0.5, speed=-0.5, next_state=S.RETURN)
+            self._backup(distance=0.5, speed=-1.0, next_state=S.RETURN)
 
         elif self.state == S.RETURN:
             self._nav_to(self.start_pose, next_state=S.DONE, final=True)
