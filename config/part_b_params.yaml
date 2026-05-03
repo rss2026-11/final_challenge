@@ -1,12 +1,12 @@
 part_b_state_machine:
   ros__parameters:
-    drive_topic_out: "/vesc/input/navigation"
+    drive_topic_out: "/vesc/high_level/input/navigation"
     shell_points_topic: "/shell_points"
     odom_topic: "/pf/pose/odom"
     approach_radius: 3.0
     parked_stable_sec: 2.0
     park_hold_sec: 5.0
-    return_to_start: true
+    return_to_start: false
     tick_hz: 20.0
 
 yolo_detector:

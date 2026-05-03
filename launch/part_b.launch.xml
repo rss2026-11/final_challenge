@@ -12,7 +12,7 @@
 
   <node pkg="path_planning" exec="trajectory_follower" name="trajectory_follower" output="screen">
     <param from="$(find-pkg-share path_planning)/config/real/config.yaml"/>
-    <param name="drive_topic" value="/vesc/high_level/input/nav_0"/>
+    <param name="drive_topic" value="/drive/nav"/>
   </node>
 
   <node pkg="safety_controller" exec="safety_controller" name="safety_controller" output="screen"/>
@@ -21,7 +21,7 @@
   <node pkg="visual_servoing" exec="homography_transformer" name="homography_transformer" output="screen"/>
 
   <node pkg="visual_servoing" exec="parking_controller" name="parking_controller" output="screen">
-    <param name="drive_topic" value="/vesc/high_level/input/nav_1"/>
+    <param name="drive_topic" value="/drive/park"/>
   </node>
 
   <!-- ===== NEW Part B perception (single YOLO, 3 outputs) ===== -->

@@ -50,6 +50,8 @@ class StateMachine(Node):
         self.declare_parameter("drive_topic_out", "/vesc/high_level/input/navigation")
         # self.declare_parameter("shell_points_topic", "/shell_points")
         self.declare_parameter("odom_topic", "/pf/pose/odom")
+        self.declare_parameter("nav_input_topic", "/drive/nav")
+        self.declare_parameter("park_input_topic", "/drive/park")
         self.declare_parameter("approach_radius", 3.0)
         self.declare_parameter("parked_stable_sec", 2.0)
         self.declare_parameter("park_hold_sec", 5.0)
@@ -59,6 +61,8 @@ class StateMachine(Node):
         self.drive_topic_out = self.get_parameter("drive_topic_out").get_parameter_value().string_value
         # shell_topic = self.get_parameter("shell_points_topic").get_parameter_value().string_value
         odom_topic = self.get_parameter("odom_topic").get_parameter_value().string_value
+        nav_in = self.get_parameter("nav_input_topic").get_parameter_value().string_value
+        park_in = self.get_parameter("park_input_topic").get_parameter_value().string_value
         self.approach_radius = self.get_parameter("approach_radius").get_parameter_value().double_value
         self.parked_stable = self.get_parameter("parked_stable_sec").get_parameter_value().double_value
         self.park_hold = self.get_parameter("park_hold_sec").get_parameter_value().double_value
@@ -85,11 +89,12 @@ class StateMachine(Node):
 
         # self.create_subscription(PoseArray, shell_topic, self._on_shell_points, 10)
         self.create_subscription(Odometry, odom_topic, self._on_odom, 10)
-        self.create_subscription(AckermannDriveStamped, "/vesc/high_level/input/nav_1", self._on_nav, 1)
-        self.create_subscription(AckermannDriveStamped, "/vesc/high_level/input/nav_2", self._on_park, 1)
+        self.create_subscription(AckermannDriveStamped, nav_in, self._on_nav, 1)
+        self.create_subscription(AckermannDriveStamped, park_in, self._on_park, 1)
         self.create_subscription(Bool, "/detections/traffic_light_is_red", self._on_red, 10)
         self.create_subscription(ConeLocationPixel, "/relative_cone_px", self._on_parking_meter, 10)
         self.create_subscription(PointStamped, "/clicked_point", self._on_clicked_point, 10)
+
 
         self.create_timer(period, self._tick)
         self.get_logger().info("part_b_state_machine ready")
