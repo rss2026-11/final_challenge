@@ -172,6 +172,7 @@ class StateMachine(Node):
 
     def _on_red(self, msg):
         self.red_light = bool(msg.data)
+        self.get_logger().info('Red Light')
 
     def _on_parking_meter(self, msg):
         self.parking_meter_last_seen = self._now()
@@ -207,7 +208,7 @@ class StateMachine(Node):
 
     def _approach(self, next_state):
         self._forward(self.latest_park_drive)
-        
+
         # Transition based on distance to cone
         if self.cone_distance is not None and self.cone_distance < 0.75:
             self.get_logger().info(f"Target distance reached: {self.cone_distance:.2f}m. Parking!")
@@ -237,7 +238,7 @@ class StateMachine(Node):
         if self.current_pose is None or self.backup_start_pose is None:
             self._publish_stop()
             return
-            
+
         d = self._dist(self.current_pose, self.backup_start_pose)
         if d >= distance:
             self._transition(next_state)
@@ -289,7 +290,7 @@ class StateMachine(Node):
         elif self.state == S.PARKED_2:
             nxt = S.BACKUP_2 if (self.return_to_start and self.start_pose) else S.DONE
             self._parked("location_2", next_state=nxt)
-            
+
         elif self.state == S.BACKUP_2:
             self._backup(distance=0.5, speed=-0.5, next_state=S.RETURN)
 
