@@ -144,10 +144,9 @@ class StateMachine(Node):
         m.drive.speed = 0.0
         m.drive.steering_angle = 0.0
 
-        if emergency:
-            self.safety_pub.publish(m)
-        else:
-            self.drive_pub.publish(m)
+        # Always publish to BOTH to ensure the car stops, no matter the multiplexer state
+        self.safety_pub.publish(m)
+        self.drive_pub.publish(m)
 
     def _forward(self, src):
         if src is None:
@@ -221,10 +220,13 @@ class StateMachine(Node):
             if d < 1.0:
                 self._transition(next_state)
         else:
-            # Transition to parking controller as soon as the meter is seen
+            # Transition to parking controller as soon as the meter is seen.
+            # COOLDOWN: Wait at least 3 seconds after entering a NAV state before 
+            # trusting the meter. This prevents the car from immediately re-parking 
+            # at the meter it just backed away from!
             meter_visible = (self._now() - self.parking_meter_last_seen) < 0.5
 
-            if meter_visible:
+            if meter_visible and self._in_state_for() > 3.0:
                 self._transition(next_state)
 
     def _approach(self, next_state):
