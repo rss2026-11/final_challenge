@@ -1,6 +1,8 @@
 part_b_state_machine:
   ros__parameters:
     drive_topic_out: "/vesc/high_level/input/navigation"
+    nav_input_topic: "/vesc/high_level/input/nav_0"
+    park_input_topic: "/vesc/high_level/input/nav_1"
     shell_points_topic: "/shell_points"
     odom_topic: "/pf/pose/odom"
     approach_radius: 3.0

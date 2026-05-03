@@ -36,9 +36,11 @@ class S(Enum):
     NAV_1 = auto()
     APPROACH_1 = auto()
     PARKED_1 = auto()
+    BACKUP_1 = auto()
     NAV_2 = auto()
     APPROACH_2 = auto()
     PARKED_2 = auto()
+    BACKUP_2 = auto()
     RETURN = auto()
     DONE = auto()
 
@@ -50,8 +52,8 @@ class StateMachine(Node):
         self.declare_parameter("drive_topic_out", "/vesc/high_level/input/navigation")
         # self.declare_parameter("shell_points_topic", "/shell_points")
         self.declare_parameter("odom_topic", "/pf/pose/odom")
-        self.declare_parameter("nav_input_topic", "/drive/nav")
-        self.declare_parameter("park_input_topic", "/drive/park")
+        self.declare_parameter("nav_input_topic", "/vesc/high_level/input/nav_0")
+        self.declare_parameter("park_input_topic", "/vesc/high_level/input/nav_1")
         self.declare_parameter("approach_radius", 3.0)
         self.declare_parameter("parked_stable_sec", 2.0)
         self.declare_parameter("park_hold_sec", 5.0)
@@ -81,6 +83,7 @@ class StateMachine(Node):
         self.goal_sent_for = None
         self.trigger_sent_for = None
         self.zero_drive_since = None
+        self.backup_start_pose = None
 
         self.drive_pub = self.create_publisher(AckermannDriveStamped, self.drive_topic_out, 1)
         self.goal_pub = self.create_publisher(PoseStamped, "/goal_pose", 1)
@@ -112,6 +115,7 @@ class StateMachine(Node):
         self.goal_sent_for = None
         self.trigger_sent_for = None
         self.zero_drive_since = None
+        self.backup_start_pose = self.current_pose
 
     def _dist(self, a, b):
         return math.hypot(a[0] - b[0], a[1] - b[1])
@@ -214,11 +218,27 @@ class StateMachine(Node):
         return (self.zero_drive_since is not None and
                 (self._now() - self.zero_drive_since) >= self.parked_stable)
 
+    def _backup(self, distance, speed, next_state):
+        if self.current_pose is None or self.backup_start_pose is None:
+            self._publish_stop()
+            return
+            
+        d = self._dist(self.current_pose, self.backup_start_pose)
+        if d >= distance:
+            self._transition(next_state)
+        else:
+            m = AckermannDriveStamped()
+            m.header.stamp = self.get_clock().now().to_msg()
+            m.header.frame_id = "base_link"
+            m.drive.speed = float(speed)
+            m.drive.steering_angle = 0.0
+            self.drive_pub.publish(m)
+
     def _tick(self):
         self.state_pub.publish(String(data=self.state.name))
 
         active = self.state in (
-            S.NAV_1, S.APPROACH_1, S.NAV_2, S.APPROACH_2, S.RETURN)
+            S.NAV_1, S.APPROACH_1, S.BACKUP_1, S.NAV_2, S.APPROACH_2, S.BACKUP_2, S.RETURN)
         if active and self.red_light:
             self._publish_stop()
             return
@@ -240,7 +260,10 @@ class StateMachine(Node):
             self._approach(next_state=S.PARKED_1)
 
         elif self.state == S.PARKED_1:
-            self._parked("location_1", next_state=S.NAV_2)
+            self._parked("location_1", next_state=S.BACKUP_1)
+
+        elif self.state == S.BACKUP_1:
+            self._backup(distance=0.5, speed=-0.5, next_state=S.NAV_2)
 
         elif self.state == S.NAV_2:
             self._nav_to(self.goals[1], next_state=S.APPROACH_2)
@@ -249,8 +272,11 @@ class StateMachine(Node):
             self._approach(next_state=S.PARKED_2)
 
         elif self.state == S.PARKED_2:
-            nxt = S.RETURN if (self.return_to_start and self.start_pose) else S.DONE
+            nxt = S.BACKUP_2 if (self.return_to_start and self.start_pose) else S.DONE
             self._parked("location_2", next_state=nxt)
+            
+        elif self.state == S.BACKUP_2:
+            self._backup(distance=0.5, speed=-0.5, next_state=S.RETURN)
 
         elif self.state == S.RETURN:
             self._nav_to(self.start_pose, next_state=S.DONE, final=True)
