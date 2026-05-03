@@ -33,4 +33,4 @@ shell_point_mock:
 
 trajectory_follower:
   ros__parameters:
-    speed: 1.0
+    speed: 0.5

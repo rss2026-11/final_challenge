@@ -221,11 +221,10 @@ class StateMachine(Node):
             if d < 1.0:
                 self._transition(next_state)
         else:
-            # HYBRID TRANSITION: Must be close to TA coordinate AND see the meter
-            in_range = d < self.approach_radius
+            # Transition to parking controller as soon as the meter is seen
             meter_visible = (self._now() - self.parking_meter_last_seen) < 0.5
 
-            if in_range and meter_visible:
+            if meter_visible:
                 self._transition(next_state)
 
     def _approach(self, next_state):
