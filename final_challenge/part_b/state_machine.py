@@ -80,6 +80,7 @@ class StateMachine(Node):
         self.latest_park_drive = None
         self.red_light = False
         self.was_red_light = False
+        self.last_red_time = 0.0
         self.parking_meter_last_seen = 0.0
         self.goal_sent_for = None
         self.trigger_sent_for = None
@@ -139,6 +140,8 @@ class StateMachine(Node):
         m = AckermannDriveStamped()
         m.header.stamp = self.get_clock().now().to_msg()
         m.header.frame_id = "base_link"
+        m.drive.speed = 0.0
+        m.drive.steering_angle = 0.0
         self.drive_pub.publish(m)
 
     def _forward(self, src):
@@ -172,7 +175,16 @@ class StateMachine(Node):
             self.zero_drive_since = None
 
     def _on_red(self, msg):
-        self.red_light = bool(msg.data)
+        current_red = bool(msg.data)
+        
+        if current_red:
+            self.last_red_time = self._now()
+            self.red_light = True
+        else:
+            # Debounce: only clear the red light if we haven't seen it for 1.0 seconds
+            if self._now() - self.last_red_time > 1.0:
+                self.red_light = False
+
         if self.red_light and not self.was_red_light:
             self.get_logger().info("🛑 RED LIGHT DETECTED! Stopping car...")
         elif not self.red_light and self.was_red_light:
