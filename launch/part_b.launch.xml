@@ -12,6 +12,7 @@
 
   <node pkg="path_planning" exec="trajectory_follower" name="trajectory_follower" output="screen">
     <param from="$(find-pkg-share path_planning)/config/real/config.yaml"/>
+    <param from="$(var params_file)"/>
     <param name="drive_topic" value="/vesc/high_level/input/nav_0"/>
   </node>
 

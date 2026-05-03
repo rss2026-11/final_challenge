@@ -28,7 +28,7 @@ from ackermann_msgs.msg import AckermannDriveStamped
 from geometry_msgs.msg import PoseArray, PoseStamped, PointStamped
 from nav_msgs.msg import Odometry
 from std_msgs.msg import Bool, String
-from vs_msgs.msg import ConeLocationPixel
+from vs_msgs.msg import ConeLocationPixel, ConeLocation
 
 class S(Enum):
     INIT = auto()
@@ -79,11 +79,14 @@ class StateMachine(Node):
         self.latest_nav_drive = None
         self.latest_park_drive = None
         self.red_light = False
+        self.was_red_light = False
+        self.last_red_time = 0.0
         self.parking_meter_last_seen = 0.0
         self.goal_sent_for = None
         self.trigger_sent_for = None
         self.zero_drive_since = None
         self.backup_start_pose = None
+        self.cone_distance = None
 
         self.drive_pub = self.create_publisher(AckermannDriveStamped, self.drive_topic_out, 1)
         self.goal_pub = self.create_publisher(PoseStamped, "/goal_pose", 1)
@@ -96,6 +99,7 @@ class StateMachine(Node):
         self.create_subscription(AckermannDriveStamped, park_in, self._on_park, 1)
         self.create_subscription(Bool, "/detections/traffic_light_is_red", self._on_red, 10)
         self.create_subscription(ConeLocationPixel, "/relative_cone_px", self._on_parking_meter, 10)
+        self.create_subscription(ConeLocation, "/relative_cone", self._on_relative_cone, 10)
         self.create_subscription(PointStamped, "/clicked_point", self._on_clicked_point, 10)
 
 
@@ -116,6 +120,7 @@ class StateMachine(Node):
         self.trigger_sent_for = None
         self.zero_drive_since = None
         self.backup_start_pose = self.current_pose
+        self.cone_distance = None
 
     def _dist(self, a, b):
         return math.hypot(a[0] - b[0], a[1] - b[1])
@@ -135,6 +140,8 @@ class StateMachine(Node):
         m = AckermannDriveStamped()
         m.header.stamp = self.get_clock().now().to_msg()
         m.header.frame_id = "base_link"
+        m.drive.speed = 0.0
+        m.drive.steering_angle = 0.0
         self.drive_pub.publish(m)
 
     def _forward(self, src):
@@ -168,10 +175,27 @@ class StateMachine(Node):
             self.zero_drive_since = None
 
     def _on_red(self, msg):
-        self.red_light = bool(msg.data)
+        current_red = bool(msg.data)
+        
+        if current_red:
+            self.last_red_time = self._now()
+            self.red_light = True
+        else:
+            # Debounce: only clear the red light if we haven't seen it for 1.0 seconds
+            if self._now() - self.last_red_time > 1.0:
+                self.red_light = False
+
+        if self.red_light and not self.was_red_light:
+            self.get_logger().info("🛑 RED LIGHT DETECTED! Stopping car...")
+        elif not self.red_light and self.was_red_light:
+            self.get_logger().info("🟢 GREEN LIGHT! Resuming...")
+        self.was_red_light = self.red_light
 
     def _on_parking_meter(self, msg):
         self.parking_meter_last_seen = self._now()
+
+    def _on_relative_cone(self, msg):
+        self.cone_distance = math.hypot(msg.x_pos, msg.y_pos)
 
     def _on_clicked_point(self, msg):
         if self.state in (S.INIT, S.WAIT_GOALS) and len(self.goals) < 2:
@@ -201,7 +225,16 @@ class StateMachine(Node):
 
     def _approach(self, next_state):
         self._forward(self.latest_park_drive)
+
+        # Transition based on distance to cone
+        if self.cone_distance is not None and self.cone_distance < 0.75:
+            self.get_logger().info(f"Target distance reached: {self.cone_distance:.2f}m. Parking!")
+            self._transition(next_state)
+            return
+
+        # Fallback: Transition based on 0 speed
         if self._parked_stable_met():
+            self.get_logger().info("Target stable stop reached. Parking!")
             self._transition(next_state)
 
     def _parked(self, label, next_state):
@@ -222,7 +255,7 @@ class StateMachine(Node):
         if self.current_pose is None or self.backup_start_pose is None:
             self._publish_stop()
             return
-            
+
         d = self._dist(self.current_pose, self.backup_start_pose)
         if d >= distance:
             self._transition(next_state)
@@ -274,7 +307,7 @@ class StateMachine(Node):
         elif self.state == S.PARKED_2:
             nxt = S.BACKUP_2 if (self.return_to_start and self.start_pose) else S.DONE
             self._parked("location_2", next_state=nxt)
-            
+
         elif self.state == S.BACKUP_2:
             self._backup(distance=0.5, speed=-0.5, next_state=S.RETURN)
 
