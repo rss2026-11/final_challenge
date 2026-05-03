@@ -176,8 +176,14 @@ class StateMachine(Node):
         self.ped_close = bool(msg.data)
 
     def _parked_stable_met(self):
-        return (self.zero_drive_since is not None and
-                (self._now() - self.zero_drive_since) >= self.parked_stable)
+        odom_speed = self.current_odom_speed  # you’d compute this from odom
+        return (
+            (self.zero_drive_since is not None and
+            (self._now() - self.zero_drive_since) >= self.parked_stable)
+            or
+            odom_speed < 0.05
+        )
+
 
     def _tick(self):
         self.state_pub.publish(String(data=self.state.name))
