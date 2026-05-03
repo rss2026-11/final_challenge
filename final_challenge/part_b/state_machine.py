@@ -28,7 +28,7 @@ from ackermann_msgs.msg import AckermannDriveStamped
 from geometry_msgs.msg import PoseArray, PoseStamped, PointStamped
 from nav_msgs.msg import Odometry
 from std_msgs.msg import Bool, String
-from vs_msgs.msg import ConeLocationPixel
+from vs_msgs.msg import ConeLocationPixel, ConeLocation
 
 class S(Enum):
     INIT = auto()
@@ -84,6 +84,7 @@ class StateMachine(Node):
         self.trigger_sent_for = None
         self.zero_drive_since = None
         self.backup_start_pose = None
+        self.cone_distance = None
 
         self.drive_pub = self.create_publisher(AckermannDriveStamped, self.drive_topic_out, 1)
         self.goal_pub = self.create_publisher(PoseStamped, "/goal_pose", 1)
@@ -96,6 +97,7 @@ class StateMachine(Node):
         self.create_subscription(AckermannDriveStamped, park_in, self._on_park, 1)
         self.create_subscription(Bool, "/detections/traffic_light_is_red", self._on_red, 10)
         self.create_subscription(ConeLocationPixel, "/relative_cone_px", self._on_parking_meter, 10)
+        self.create_subscription(ConeLocation, "/relative_cone", self._on_relative_cone, 10)
         self.create_subscription(PointStamped, "/clicked_point", self._on_clicked_point, 10)
 
 
@@ -116,6 +118,7 @@ class StateMachine(Node):
         self.trigger_sent_for = None
         self.zero_drive_since = None
         self.backup_start_pose = self.current_pose
+        self.cone_distance = None
 
     def _dist(self, a, b):
         return math.hypot(a[0] - b[0], a[1] - b[1])
@@ -173,6 +176,9 @@ class StateMachine(Node):
     def _on_parking_meter(self, msg):
         self.parking_meter_last_seen = self._now()
 
+    def _on_relative_cone(self, msg):
+        self.cone_distance = math.hypot(msg.x_pos, msg.y_pos)
+
     def _on_clicked_point(self, msg):
         if self.state in (S.INIT, S.WAIT_GOALS) and len(self.goals) < 2:
             self.goals.append((msg.point.x, msg.point.y))
@@ -201,7 +207,16 @@ class StateMachine(Node):
 
     def _approach(self, next_state):
         self._forward(self.latest_park_drive)
+        
+        # Transition based on distance to cone
+        if self.cone_distance is not None and self.cone_distance < 0.75:
+            self.get_logger().info(f"Target distance reached: {self.cone_distance:.2f}m. Parking!")
+            self._transition(next_state)
+            return
+
+        # Fallback: Transition based on 0 speed
         if self._parked_stable_met():
+            self.get_logger().info("Target stable stop reached. Parking!")
             self._transition(next_state)
 
     def _parked(self, label, next_state):
