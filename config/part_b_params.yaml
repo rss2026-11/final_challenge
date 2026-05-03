@@ -14,11 +14,11 @@ part_b_state_machine:
 yolo_detector:
   ros__parameters:
     model: "yolo11n.pt"
-    conf_threshold: 0.3
+    conf_threshold: 0.2
     iou_threshold: 0.7
     image_topic: "/zed/zed_node/rgb/image_rect_color"
     red_pixel_fraction: 0.08
-    traffic_light_min_area: 200
+    traffic_light_min_area: 50
     close_bbox_height_frac: 0.35
 
 image_saver:
@@ -30,3 +30,7 @@ shell_point_mock:
   ros__parameters:
     topic: "/shell_points"
     delay_sec: 2.0
+
+trajectory_follower:
+  ros__parameters:
+    speed: 1.0
