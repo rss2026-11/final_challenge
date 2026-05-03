@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 """Consolidated YOLO detector for Part B.
 
-Runs YOLO once per ZED image and derives three outputs in one pass:
+Runs YOLO once per ZED image and derives two outputs in one pass:
   - /relative_cone_px (best 'parking meter' bottom-center pixel)
         -> homography_transformer -> /relative_cone -> parking_controller
   - /detections/traffic_light_is_red (HSV red fraction inside 'traffic light' bbox)
-  - /detections/pedestrian_close (bbox height / image height > threshold)
 Plus /part_b/debug_image with all bboxes drawn for image_saver.
 
 Adapted from Visual_Servoing/yolo_annotator.py (same class_color_map / Detection /
@@ -17,15 +16,15 @@ import numpy as np
 import rclpy
 import torch
 
+from std_msgs.msg import Bool
+from vs_msgs.msg import ConeLocationPixel
+from typing import List, Optional
+
+from sensor_msgs.msg import Image
 from cv_bridge import CvBridge
 from dataclasses import dataclass
 from rclpy.node import Node
-from sensor_msgs.msg import Image
-from std_msgs.msg import Bool
-from typing import List, Optional
 from ultralytics import YOLO
-
-from vs_msgs.msg import ConeLocationPixel
 
 
 @dataclass(frozen=True)
@@ -33,31 +32,35 @@ class Detection:
     class_id: int
     class_name: str
     confidence: float
+    # Bounding box coordinates in the original image:
     x1: int
     y1: int
     x2: int
     y2: int
 
 
-class YoloDetectorNode(Node):
+class YoloAnnotatorNode(Node):
     def __init__(self) -> None:
         super().__init__("yolo_detector")
 
-        self.model_name = self.declare_parameter(
-            "model", "yolo11n.pt").get_parameter_value().string_value
-        self.conf_threshold = self.declare_parameter(
-            "conf_threshold", 0.3).get_parameter_value().double_value
-        self.iou_threshold = self.declare_parameter(
-            "iou_threshold", 0.7).get_parameter_value().double_value
-        self.image_topic = self.declare_parameter(
-            "image_topic", "/zed/zed_node/rgb/image_rect_color"
-        ).get_parameter_value().string_value
-        self.red_pixel_fraction = self.declare_parameter(
-            "red_pixel_fraction", 0.08).get_parameter_value().double_value
-        self.traffic_light_min_area = self.declare_parameter(
-            "traffic_light_min_area", 200).get_parameter_value().integer_value
-        self.close_bbox_height_frac = self.declare_parameter(
-            "close_bbox_height_frac", 0.35).get_parameter_value().double_value
+        self.model_name = (
+            self.declare_parameter("model", "yolo11n.pt")
+            .get_parameter_value()
+            .string_value
+        )
+        self.conf_threshold = (
+            self.declare_parameter("conf_threshold", 0.5)
+            .get_parameter_value()
+            .double_value
+        )
+        self.iou_threshold = (
+            self.declare_parameter("iou_threshold", 0.7)
+            .get_parameter_value()
+            .double_value
+        )
+
+        self.red_pixel_fraction = self.declare_parameter("red_pixel_fraction", 0.08).get_parameter_value().double_value
+        self.traffic_light_min_area = self.declare_parameter("traffic_light_min_area", 200).get_parameter_value().integer_value
 
         self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
         self.model = YOLO(self.model_name)
@@ -65,36 +68,45 @@ class YoloDetectorNode(Node):
 
         self.class_color_map = self.get_class_color_map()
         self.allowed_cls = [
-            i for i, n in self.model.names.items() if n in self.class_color_map]
+            i for i, name in self.model.names.items()
+            if name in self.class_color_map
+        ]
 
-        self.get_logger().info(f"yolo_detector: {self.model_name} on {self.device}")
-        self.get_logger().info(f"keeping class ids: {self.allowed_cls}")
+        self.get_logger().info(f"Model classes: {self.model.names}")
+        self.get_logger().info(f"Running {self.model_name} on device {self.device}")
+        self.get_logger().info(f"Confidence threshold: {self.conf_threshold}")
+        if self.allowed_cls:
+            self.get_logger().info(f"You've chosen to keep these class IDs: {self.allowed_cls}")
+        else:
+            self.get_logger().warn("No allowed classes matched the model's class list.")
 
         self.bridge = CvBridge()
-        self.sub = self.create_subscription(Image, self.image_topic, self.on_image, 10)
-        self.dbg_pub = self.create_publisher(Image, "/part_b/debug_image", 10)
-        self.px_pub = self.create_publisher(ConeLocationPixel, "/relative_cone_px", 1)
+        self.sub = self.create_subscription(Image, "/zed/zed_node/rgb/image_rect_color", self.on_image, 10)
+        self.pub = self.create_publisher(Image, "/part_b/debug_image", 10)
         self.red_pub = self.create_publisher(Bool, "/detections/traffic_light_is_red", 1)
-        self.ped_pub = self.create_publisher(Bool, "/detections/pedestrian_close", 1)
+        self.px_pub = self.create_publisher(ConeLocationPixel, "/relative_cone_px", 1)
 
-    def get_class_color_map(self) -> dict:
+    def get_class_color_map(self) -> dict[str, tuple[int, int, int]]:
         return {
-            "parking meter": (0, 255, 0),
-            "traffic light": (0, 255, 255),
-            "person": (255, 0, 0),
+            "traffic light": (0, 255, 0),   # Green
+            "parking meter": (255, 0, 0),   # Blue
         }
 
     def on_image(self, msg: Image) -> None:
         try:
             bgr = self.bridge.imgmsg_to_cv2(msg, desired_encoding="bgr8")
         except Exception as e:
-            self.get_logger().error(f"cv_bridge failed: {e}")
+            self.get_logger().error(f"cv_bridge conversion failed: {e}")
             return
 
         try:
             results = self.model(
-                bgr, classes=self.allowed_cls,
-                conf=self.conf_threshold, iou=self.iou_threshold, verbose=False)
+                bgr,
+                classes=self.allowed_cls,
+                conf=self.conf_threshold,
+                iou=self.iou_threshold,
+                verbose=False,
+            )
         except Exception as e:
             self.get_logger().error(f"YOLO inference failed: {e}")
             return
@@ -103,85 +115,125 @@ class YoloDetectorNode(Node):
             return
 
         dets = self.results_to_detections(results[0])
-        annotated = self.draw_and_analyze(bgr, dets)
 
-        out = self.bridge.cv2_to_imgmsg(annotated, encoding="bgr8")
-        out.header = msg.header
-        self.dbg_pub.publish(out)
-
-    def results_to_detections(self, result) -> List[Detection]:
-        detections = []
-        if result.boxes is None:
-            return detections
-        xyxy_np = result.boxes.xyxy.detach().cpu().numpy()
-        conf_np = result.boxes.conf.detach().cpu().numpy()
-        cls_np = result.boxes.cls.detach().cpu().numpy()
-        for xys, confs, clss in zip(xyxy_np, conf_np, cls_np):
-            detections.append(Detection(
-                int(clss), self.model.names[int(clss)], float(confs),
-                int(xys[0]), int(xys[1]), int(xys[2]), int(xys[3])))
-        return detections
-
-    def draw_and_analyze(self, bgr: np.ndarray, dets: List[Detection]) -> np.ndarray:
-        h_img = bgr.shape[0]
-        out_image = bgr.copy()
-
+        # Reduce N raw bboxes into the two decisions downstream nodes actually consume:
+        #   - parking_controller wants ONE target point  -> best_pm (highest-conf parking meter)
+        #   - state_machine wants ONE bool               -> any_red (is there a stop-worthy red light)
         best_pm: Optional[Detection] = None
         any_red = False
-        any_ped_close = False
-
         for det in dets:
-            color = self.class_color_map[det.class_name]
-
             if det.class_name == "parking meter":
+                # Keep the most confident detection; multiple meters in frame are possible
+                # and parking_controller can only chase one.
                 if best_pm is None or det.confidence > best_pm.confidence:
                     best_pm = det
-
             elif det.class_name == "traffic light":
+                # Area gate: tiny far-away specks shouldn't slam the brakes.
                 area = (det.x2 - det.x1) * (det.y2 - det.y1)
                 if area >= self.traffic_light_min_area:
+                    # Crop the ORIGINAL bgr (not the annotated image) — drawing rectangles
+                    # over the bbox before HSV-checking would dilute the red-pixel ratio.
+                    # YOLO doesn't tell us the light's color, so we have to check it ourselves.
                     crop = bgr[det.y1:det.y2, det.x1:det.x2]
                     if self._is_red(crop):
                         any_red = True
-                        color = (0, 0, 255)
-
-            elif det.class_name == "person":
-                frac = (det.y2 - det.y1) / h_img
-                if frac > self.close_bbox_height_frac:
-                    any_ped_close = True
-                    color = (0, 0, 255)
-
-            cv2.rectangle(out_image, (det.x1, det.y1), (det.x2, det.y2), color, 2)
-            label = f"{det.class_name} {det.confidence:.2f}"
-            ty = max(det.y1 - 10, 10)
-            cv2.putText(
-                out_image, label, (det.x1, ty),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2, cv2.LINE_AA)
 
         if best_pm is not None:
+            # Bottom-center pixel, not bbox center: the homography is calibrated on the
+            # ground plane, so we want the point where the meter touches the floor.
+            # The middle of the bbox would project to a point floating in the air.
             px = ConeLocationPixel()
             px.u = float((best_pm.x1 + best_pm.x2) / 2.0)
             px.v = float(best_pm.y2)
             self.px_pub.publish(px)
 
+        # Publish every frame, including False. state_machine.red_light latches on whatever
+        # value arrives, so if we only ever published True the flag would stick on after
+        # the first red light and the car would never move again.
         self.red_pub.publish(Bool(data=any_red))
-        self.ped_pub.publish(Bool(data=any_ped_close))
 
-        return out_image
+        # Drawing is a pure side-effect for the debug image; no decisions live in there.
+        annotated = self.draw_detections(bgr, dets)
+        out_msg = self.bridge.cv2_to_imgmsg(annotated, encoding="bgr8")
+        out_msg.header = msg.header
+        self.pub.publish(out_msg)
 
-    def _is_red(self, crop: np.ndarray) -> bool:
-        if crop.size == 0:
+    def results_to_detections(self, result) -> List[Detection]:
+        """
+        Convert an Ultralytics result into a Detection list.
+
+        YOLOv11 outputs:
+          result.boxes.xyxy: (N, 4) tensor
+          result.boxes.conf: (N,) tensor
+          result.boxes.cls:  (N,) tensor
+        """
+        detections = []
+
+        if result.boxes is None:
+            return detections
+
+        xyxy = result.boxes.xyxy
+        conf = result.boxes.conf
+        cls = result.boxes.cls
+
+        xyxy_np = xyxy.detach().cpu().numpy() if hasattr(xyxy, "detach") else np.asarray(xyxy)
+        conf_np = conf.detach().cpu().numpy() if hasattr(conf, "detach") else np.asarray(conf)
+        cls_np = cls.detach().cpu().numpy() if hasattr(cls, "detach") else np.asarray(cls)
+
+        for xys, confs, clss in zip(xyxy_np, conf_np, cls_np):
+            detection = Detection(
+                int(clss),
+                self.model.names[int(clss)],
+                float(confs),
+                int(xys[0]), int(xys[1]), int(xys[2]), int(xys[3]),
+            )
+            detections.append(detection)
+
+        return detections
+
+    def _is_red(self, image: np.ndarray) -> bool:
+        if image.size == 0:
             return False
-        hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
+        hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
         m1 = cv2.inRange(hsv, np.array([0, 100, 100]), np.array([10, 255, 255]))
         m2 = cv2.inRange(hsv, np.array([160, 100, 100]), np.array([179, 255, 255]))
         red = m1 | m2
         return (float(np.count_nonzero(red)) / float(red.size)) > self.red_pixel_fraction
 
+    def draw_detections(
+        self,
+        bgr_image: np.ndarray,
+        detections: List[Detection],
+    ) -> np.ndarray:
+        out_image = bgr_image.copy()
+
+        for det in detections:
+            top_left = (int(det.x1), int(det.y1))
+            bottom_right = (int(det.x2), int(det.y2))
+            color = self.class_color_map[det.class_name]
+
+            cv2.rectangle(out_image, top_left, bottom_right, color, 2)
+
+            label = f"{det.class_name} {det.confidence:.2f}"
+            text_x = int(det.x1)
+            text_y = max(int(det.y1) - 10, 10)
+            cv2.putText(
+                out_image,
+                label,
+                (text_x, text_y),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.5,
+                color,
+                2,
+                cv2.LINE_AA,
+            )
+
+        return out_image
+
 
 def main() -> None:
     rclpy.init()
-    node = YoloDetectorNode()
+    node = YoloAnnotatorNode()
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:
