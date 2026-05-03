@@ -89,6 +89,7 @@ class StateMachine(Node):
         self.cone_distance = None
 
         self.drive_pub = self.create_publisher(AckermannDriveStamped, self.drive_topic_out, 1)
+        self.safety_pub = self.create_publisher(AckermannDriveStamped, "/vesc/low_level/input/safety", 1)
         self.goal_pub = self.create_publisher(PoseStamped, "/goal_pose", 1)
         self.state_pub = self.create_publisher(String, "/part_b/state", 1)
         self.trigger_pub = self.create_publisher(String, "/part_b/park_trigger", 10)
@@ -136,13 +137,17 @@ class StateMachine(Node):
         self.get_logger().info(f"goal -> ({xy[0]:.2f}, {xy[1]:.2f})")
         self.goal_sent_for = self.state
 
-    def _publish_stop(self):
+    def _publish_stop(self, emergency=False):
         m = AckermannDriveStamped()
         m.header.stamp = self.get_clock().now().to_msg()
         m.header.frame_id = "base_link"
         m.drive.speed = 0.0
         m.drive.steering_angle = 0.0
-        self.drive_pub.publish(m)
+        
+        if emergency:
+            self.safety_pub.publish(m)
+        else:
+            self.drive_pub.publish(m)
 
     def _forward(self, src):
         if src is None:
@@ -273,7 +278,7 @@ class StateMachine(Node):
         active = self.state in (
             S.NAV_1, S.APPROACH_1, S.BACKUP_1, S.NAV_2, S.APPROACH_2, S.BACKUP_2, S.RETURN)
         if active and self.red_light:
-            self._publish_stop()
+            self._publish_stop(emergency=True)
             return
 
         if self.state == S.INIT:
