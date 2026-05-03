@@ -62,6 +62,14 @@ class YoloAnnotatorNode(Node):
         self.red_pixel_fraction = self.declare_parameter("red_pixel_fraction", 0.08).get_parameter_value().double_value
         self.traffic_light_min_area = self.declare_parameter("traffic_light_min_area", 200).get_parameter_value().integer_value
 
+        # Fraction of image height to ignore from the top (e.g. 1/3 means skip top third).
+        # Detections whose bottom edge falls entirely above this cutoff are dropped.
+        self.top_crop_fraction = (
+            self.declare_parameter("top_crop_fraction", 1.0 / 3.0)
+            .get_parameter_value()
+            .double_value
+        )
+
         self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
         self.model = YOLO(self.model_name)
         self.model.to(self.device)
@@ -75,6 +83,7 @@ class YoloAnnotatorNode(Node):
         self.get_logger().info(f"Model classes: {self.model.names}")
         self.get_logger().info(f"Running {self.model_name} on device {self.device}")
         self.get_logger().info(f"Confidence threshold: {self.conf_threshold}")
+        self.get_logger().info(f"Top crop fraction: {self.top_crop_fraction}")
         if self.allowed_cls:
             self.get_logger().info(f"You've chosen to keep these class IDs: {self.allowed_cls}")
         else:
@@ -99,6 +108,13 @@ class YoloAnnotatorNode(Node):
             self.get_logger().error(f"cv_bridge conversion failed: {e}")
             return
 
+        # Compute the row below which we accept detections. Anything whose bottom edge (y2)
+        # sits above this is "fully in the ignored top region" and gets dropped. We don't
+        # crop the image itself — keeping coordinates in the original ZED frame means the
+        # homography and debug image stay consistent without offset bookkeeping.
+        img_h = bgr.shape[0]
+        y_cutoff = int(img_h * self.top_crop_fraction)
+
         try:
             results = self.model(
                 bgr,
@@ -114,14 +130,19 @@ class YoloAnnotatorNode(Node):
         if not results:
             return
 
-        dets = self.results_to_detections(results[0])
+        all_dets = self.results_to_detections(results[0])
+
+        # Filter out detections fully in the ignored top region. Using y2 (bottom of bbox)
+        # means a meter/light that straddles the cutoff still counts — matches the
+        # homography logic below which uses y2 as the ground-contact point.
+        kept_dets = [d for d in all_dets if d.y2 >= y_cutoff]
 
         # Reduce N raw bboxes into the two decisions downstream nodes actually consume:
         #   - parking_controller wants ONE target point  -> best_pm (highest-conf parking meter)
         #   - state_machine wants ONE bool               -> any_red (is there a stop-worthy red light)
         best_pm: Optional[Detection] = None
         any_red = False
-        for det in dets:
+        for det in kept_dets:
             if det.class_name == "parking meter":
                 # Keep the most confident detection; multiple meters in frame are possible
                 # and parking_controller can only chase one.
@@ -153,7 +174,10 @@ class YoloAnnotatorNode(Node):
         self.red_pub.publish(Bool(data=any_red))
 
         # Drawing is a pure side-effect for the debug image; no decisions live in there.
-        annotated = self.draw_detections(bgr, dets)
+        # Draw only the kept detections and overlay the cutoff line so it's obvious what
+        # region is being ignored.
+        annotated = self.draw_detections(bgr, kept_dets)
+        cv2.line(annotated, (0, y_cutoff), (annotated.shape[1], y_cutoff), (0, 0, 255), 1, cv2.LINE_AA)
         out_msg = self.bridge.cv2_to_imgmsg(annotated, encoding="bgr8")
         out_msg.header = msg.header
         self.pub.publish(out_msg)
