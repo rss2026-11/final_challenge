@@ -15,7 +15,7 @@
     <param name="drive_topic" value="/drive/nav"/>
   </node>
 
-  <node pkg="safety_controller" exec="safety_controller" name="safety_controller" output="screen"/>
+  <!-- ===== <node pkg="safety_controller" exec="safety_controller" name="safety_controller" output="screen"/> ===== -->
 
   <!-- ===== EXISTING Visual_Servoing: pixel->ground + parking control ===== -->
   <node pkg="visual_servoing" exec="homography_transformer" name="homography_transformer" output="screen"/>
