@@ -14,10 +14,10 @@ yolo_detector:
     model: "yolo11n.pt"
     conf_threshold: 0.2
     iou_threshold: 0.7
-    top_crop_fraction: 0.5
+    top_crop_fraction: 0.33
     image_topic: "/zed/zed_node/rgb/image_rect_color"
-    red_pixel_fraction: 0.01
-    traffic_light_min_area: 50
+    red_pixel_fraction: 0.005
+    traffic_light_min_area: 5
 
 image_saver:
   ros__parameters:
