@@ -61,7 +61,7 @@ class YoloAnnotatorNode(Node):
             .double_value
         )
 
-        self.red_pixel_fraction = self.declare_parameter("red_pixel_fraction", 0.08).get_parameter_value().double_value
+        self.red_pixel_fraction = self.declare_parameter("red_pixel_fraction", 0.04).get_parameter_value().double_value
         self.traffic_light_min_area = self.declare_parameter("traffic_light_min_area", 200).get_parameter_value().integer_value
 
         # Fraction of image height to ignore from the top (e.g. 1/3 means skip top third).

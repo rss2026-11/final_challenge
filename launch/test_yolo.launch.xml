@@ -1,0 +1,12 @@
+<launch>
+  <!-- Load the parameters so YOLO knows the thresholds! -->
+  <arg name="params_file" default="$(find-pkg-share final_challenge)/config/part_b_params.yaml"/>
+
+  <!-- Safety Controller -->
+  <node pkg="safety_controller" exec="safety_controller" name="safety_controller" output="screen"/>
+
+  <!-- YOLO Detector -->
+  <node pkg="final_challenge" exec="yolo_detector" name="yolo_detector" output="screen">
+    <param from="$(var params_file)"/>
+  </node>
+</launch>
