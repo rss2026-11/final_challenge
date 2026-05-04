@@ -16,8 +16,8 @@ yolo_detector:
     iou_threshold: 0.7
     top_crop_fraction: 0.33
     image_topic: "/zed/zed_node/rgb/image_rect_color"
-    red_pixel_fraction: 0.005
-    traffic_light_min_area: 5
+    red_pixel_fraction: 0.02
+    traffic_light_min_area: 20
 
 image_saver:
   ros__parameters:
