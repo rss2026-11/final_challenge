@@ -1,0 +1,23 @@
+<launch>
+  <arg name="params_file" default="$(find-pkg-share final_challenge)/config/part_b_params.yaml"/>
+
+  <!-- Safety Controller -->
+  <node pkg="safety_controller" exec="safety_controller" name="safety_controller" output="screen"/>
+
+  <!-- YOLO Perception -->
+  <node pkg="final_challenge" exec="yolo_detector" name="yolo_detector" output="screen">
+    <param from="$(var params_file)"/>
+  </node>
+  
+  <!-- Pixel to Ground coordinates -->
+  <node pkg="visual_servoing" exec="homography_transformer" name="homography_transformer" output="screen"/>
+
+  <!-- Parking Controller -->
+  <!-- We map this directly to the multiplexer's navigation input! 
+       This bypasses the state machine, meaning the car will instantly 
+       start servoing towards the parking meter as soon as YOLO sees it. -->
+  <node pkg="visual_servoing" exec="parking_controller" name="parking_controller" output="screen">
+    <param name="drive_topic" value="/vesc/high_level/input/navigation"/>
+  </node>
+
+</launch>
