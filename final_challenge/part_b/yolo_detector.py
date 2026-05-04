@@ -27,7 +27,7 @@ from rclpy.node import Node
 from ultralytics import YOLO
 
 
-@dataclass(frozen=True)
+@dataclass
 class Detection:
     class_id: int
     class_name: str
@@ -37,6 +37,8 @@ class Detection:
     y1: int
     x2: int
     y2: int
+    # Red light status (for annotation)
+    is_red: bool = False
 
 
 class YoloAnnotatorNode(Node):
@@ -158,6 +160,7 @@ class YoloAnnotatorNode(Node):
                     crop = bgr[det.y1:det.y2, det.x1:det.x2]
                     if self._is_red(crop):
                         any_red = True
+                        det.is_red = True
 
         if best_pm is not None:
             # Bottom-center pixel, not bbox center: the homography is calibrated on the
@@ -235,10 +238,14 @@ class YoloAnnotatorNode(Node):
             top_left = (int(det.x1), int(det.y1))
             bottom_right = (int(det.x2), int(det.y2))
             color = self.class_color_map[det.class_name]
+            label = f"{det.class_name} {det.confidence:.2f}"
+
+            if getattr(det, 'is_red', False):
+                color = (0, 0, 255)  # Bright Red
+                label += " [RED!]"
 
             cv2.rectangle(out_image, top_left, bottom_right, color, 2)
 
-            label = f"{det.class_name} {det.confidence:.2f}"
             text_x = int(det.x1)
             text_y = max(int(det.y1) - 10, 10)
             cv2.putText(
