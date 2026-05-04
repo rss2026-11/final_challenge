@@ -80,6 +80,8 @@ class StateMachine(Node):
         self.red_light = False
         self.was_red_light = False
         self.last_red_time = 0.0
+        self.light_visible = False
+        self.last_light_visible_time = 0.0
         self.parking_meter_last_seen = 0.0
         self.goal_sent_for = None
         self.trigger_sent_for = None
@@ -97,6 +99,7 @@ class StateMachine(Node):
         self.create_subscription(AckermannDriveStamped, nav_in, self._on_nav, 1)
         self.create_subscription(AckermannDriveStamped, park_in, self._on_park, 1)
         self.create_subscription(Bool, "/detections/traffic_light_is_red", self._on_red, 10)
+        self.create_subscription(Bool, "/detections/traffic_light_visible", self._on_light_visible, 10)
         self.create_subscription(ConeLocationPixel, "/relative_cone_px", self._on_parking_meter, 10)
         self.create_subscription(ConeLocation, "/relative_cone", self._on_relative_cone, 10)
         self.create_subscription(PointStamped, "/clicked_point", self._on_clicked_point, 10)
@@ -154,6 +157,8 @@ class StateMachine(Node):
         m.header.stamp = self.get_clock().now().to_msg()
         m.header.frame_id = "base_link"
         m.drive = src.drive
+        if self.light_visible:
+            m.drive.speed = min(m.drive.speed, 0.2)
         self.drive_pub.publish(m)
 
     def _on_odom(self, msg):
@@ -189,6 +194,14 @@ class StateMachine(Node):
             self.get_logger().info("🟢 GREEN LIGHT! Resuming...")
         self.was_red_light = self.red_light
 
+    def _on_light_visible(self, msg):
+        if msg.data:
+            self.last_light_visible_time = self._now()
+            self.light_visible = True
+        else:
+            if self._now() - self.last_light_visible_time > 0.5:
+                self.light_visible = False
+
     def _on_parking_meter(self, msg):
         self.parking_meter_last_seen = self._now()
 
@@ -219,9 +232,10 @@ class StateMachine(Node):
             # trusting the meter. This prevents the car from immediately re-parking 
             # at the meter it just backed away from!
             meter_visible = (self._now() - self.parking_meter_last_seen) < 0.5
-            within_range = self.cone_distance is not None and self.cone_distance < 3.0
+            within_range = self.cone_distance is not None and self.cone_distance < 4.0
 
             if meter_visible and within_range and self._in_state_for() > 3.0:
+                self.get_logger().info(f"Cone dist {self.cone_distance:.2f}m < 4.0m. Transitioning to APPROACH!")
                 self._transition(next_state)
 
     def _approach(self, next_state):

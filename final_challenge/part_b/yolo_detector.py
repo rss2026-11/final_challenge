@@ -95,6 +95,7 @@ class YoloAnnotatorNode(Node):
         self.sub = self.create_subscription(Image, "/zed/zed_node/rgb/image_rect_color", self.on_image, 10)
         self.pub = self.create_publisher(Image, "/part_b/debug_image", 10)
         self.red_pub = self.create_publisher(Bool, "/detections/traffic_light_is_red", 1)
+        self.tl_visible_pub = self.create_publisher(Bool, "/detections/traffic_light_visible", 1)
         self.px_pub = self.create_publisher(ConeLocationPixel, "/relative_cone_px", 1)
 
     def get_class_color_map(self) -> dict[str, tuple[int, int, int]]:
@@ -144,6 +145,7 @@ class YoloAnnotatorNode(Node):
         #   - state_machine wants ONE bool               -> any_red (is there a stop-worthy red light)
         best_pm: Optional[Detection] = None
         any_red = False
+        any_light = False
         for det in kept_dets:
             if det.class_name == "parking meter":
                 # Keep the most confident detection; multiple meters in frame are possible
@@ -151,6 +153,7 @@ class YoloAnnotatorNode(Node):
                 if best_pm is None or det.confidence > best_pm.confidence:
                     best_pm = det
             elif det.class_name == "traffic light":
+                any_light = True
                 # Area gate: tiny far-away specks shouldn't slam the brakes.
                 area = (det.x2 - det.x1) * (det.y2 - det.y1)
                 if area >= self.traffic_light_min_area:
@@ -175,6 +178,7 @@ class YoloAnnotatorNode(Node):
         # value arrives, so if we only ever published True the flag would stick on after
         # the first red light and the car would never move again.
         self.red_pub.publish(Bool(data=any_red))
+        self.tl_visible_pub.publish(Bool(data=any_light))
 
         # Drawing is a pure side-effect for the debug image; no decisions live in there.
         # Draw only the kept detections and overlay the cutoff line so it's obvious what
