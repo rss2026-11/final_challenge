@@ -15,7 +15,7 @@ Drive mux (we publish to /vesc/high_level/input/navigation):
     others      -> publish 0.0 stop command
 
 "Parked" is triggered immediately when a parking meter is seen during NAV.
-It is completed when distance to cone < 0.9m. We then hold stop for 5s, 
+It is completed when distance to cone < 0.9m. We then hold stop for 5s,
 fire an image-save trigger, and then backup 0.5m before continuing.
 """
 import math
@@ -228,13 +228,13 @@ class StateMachine(Node):
                 self._transition(next_state)
         else:
             # Transition to parking controller as soon as the meter is seen.
-            # COOLDOWN: Wait at least 3 seconds after entering a NAV state before 
-            # trusting the meter. This prevents the car from immediately re-parking 
+            # COOLDOWN: Wait at least 3 seconds after entering a NAV state before
+            # trusting the meter. This prevents the car from immediately re-parking
             # at the meter it just backed away from!
             meter_visible = (self._now() - self.parking_meter_last_seen) < 0.5
-            within_range = self.cone_distance is not None and self.cone_distance < 4.0
+            within_range = self.cone_distance is not None and self.cone_distance < 3.0
 
-            if meter_visible and within_range and self._in_state_for() > 3.0:
+            if meter_visible and within_range and self._in_state_for() > 2.0:
                 self.get_logger().info(f"Cone dist {self.cone_distance:.2f}m < 4.0m. Transitioning to APPROACH!")
                 self._transition(next_state)
 
