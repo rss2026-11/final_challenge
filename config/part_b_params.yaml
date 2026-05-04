@@ -3,9 +3,7 @@ part_b_state_machine:
     drive_topic_out: "/vesc/high_level/input/navigation"
     nav_input_topic: "/vesc/high_level/input/nav_0"
     park_input_topic: "/vesc/high_level/input/nav_1"
-    shell_points_topic: "/shell_points"
     odom_topic: "/pf/pose/odom"
-    approach_radius: 3.0
     parked_stable_sec: 2.0
     park_hold_sec: 5.0
     return_to_start: false
@@ -19,7 +17,6 @@ yolo_detector:
     image_topic: "/zed/zed_node/rgb/image_rect_color"
     red_pixel_fraction: 0.08
     traffic_light_min_area: 50
-    close_bbox_height_frac: 0.35
 
 image_saver:
   ros__parameters:

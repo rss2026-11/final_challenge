@@ -1,22 +1,22 @@
 """Mission manager for Part B: Mrs. Puff's Boating School.
 
 State flow:
-    INIT -> WAIT_GOALS -> NAV_1 -> APPROACH_1 -> PARKED_1
-         -> NAV_2 -> APPROACH_2 -> PARKED_2
+    INIT -> WAIT_GOALS -> NAV_1 -> APPROACH_1 -> PARKED_1 -> BACKUP_1
+         -> NAV_2 -> APPROACH_2 -> PARKED_2 -> BACKUP_2
          -> RETURN -> DONE
 
 Interrupts (override drive from any active-driving state):
     red light visible -> publish stop
-    pedestrian close  -> publish stop
 
-Drive mux (we publish to /drive; safety_controller is downstream):
-    NAV_*       -> forward /drive/nav  (from trajectory_follower)
-    APPROACH_*  -> forward /drive/park (from parking_controller)
-    others      -> publish stop
+Drive mux (we publish to /vesc/high_level/input/navigation):
+    NAV_*       -> forward nav_in (from trajectory_follower)
+    APPROACH_*  -> forward park_in (from parking_controller)
+    BACKUP_*    -> reverse at -1.0 m/s for 0.5m
+    others      -> publish 0.0 stop command
 
-"Parked" is detected by parking_controller's own output: when its speed stays
-~0 for parked_stable_sec, it has reached the target. We then hold stop for
-park_hold_sec (spec: 5s), firing an image-save trigger in between.
+"Parked" is triggered immediately when a parking meter is seen during NAV.
+It is completed when distance to cone < 0.9m. We then hold stop for 5s, 
+fire an image-save trigger, and then backup 0.5m before continuing.
 """
 import math
 from enum import Enum, auto
@@ -61,7 +61,6 @@ class StateMachine(Node):
         self.declare_parameter("tick_hz", 20.0)
 
         self.drive_topic_out = self.get_parameter("drive_topic_out").get_parameter_value().string_value
-        # shell_topic = self.get_parameter("shell_points_topic").get_parameter_value().string_value
         odom_topic = self.get_parameter("odom_topic").get_parameter_value().string_value
         nav_in = self.get_parameter("nav_input_topic").get_parameter_value().string_value
         park_in = self.get_parameter("park_input_topic").get_parameter_value().string_value
@@ -94,7 +93,6 @@ class StateMachine(Node):
         self.state_pub = self.create_publisher(String, "/part_b/state", 1)
         self.trigger_pub = self.create_publisher(String, "/part_b/park_trigger", 10)
 
-        # self.create_subscription(PoseArray, shell_topic, self._on_shell_points, 10)
         self.create_subscription(Odometry, odom_topic, self._on_odom, 10)
         self.create_subscription(AckermannDriveStamped, nav_in, self._on_nav, 1)
         self.create_subscription(AckermannDriveStamped, park_in, self._on_park, 1)
@@ -137,7 +135,7 @@ class StateMachine(Node):
         self.get_logger().info(f"goal -> ({xy[0]:.2f}, {xy[1]:.2f})")
         self.goal_sent_for = self.state
 
-    def _publish_stop(self, emergency=False):
+    def _publish_stop(self):
         m = AckermannDriveStamped()
         m.header.stamp = self.get_clock().now().to_msg()
         m.header.frame_id = "base_link"
@@ -157,10 +155,6 @@ class StateMachine(Node):
         m.header.frame_id = "base_link"
         m.drive = src.drive
         self.drive_pub.publish(m)
-
-    # def _on_shell_points(self, msg):
-    #     self.goals = [(p.position.x, p.position.y) for p in msg.poses]
-    #     self.get_logger().info(f"shell points: {self.goals}")
 
     def _on_odom(self, msg):
         self.current_pose = (msg.pose.pose.position.x, msg.pose.pose.position.y)
@@ -279,7 +273,7 @@ class StateMachine(Node):
         active = self.state in (
             S.NAV_1, S.APPROACH_1, S.BACKUP_1, S.NAV_2, S.APPROACH_2, S.BACKUP_2, S.RETURN)
         if active and self.red_light:
-            self._publish_stop(emergency=True)
+            self._publish_stop()
             return
 
         if self.state == S.INIT:
