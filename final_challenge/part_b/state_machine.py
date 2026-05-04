@@ -219,8 +219,9 @@ class StateMachine(Node):
             # trusting the meter. This prevents the car from immediately re-parking 
             # at the meter it just backed away from!
             meter_visible = (self._now() - self.parking_meter_last_seen) < 0.5
+            within_range = self.cone_distance is not None and self.cone_distance < 3.0
 
-            if meter_visible and self._in_state_for() > 3.0:
+            if meter_visible and within_range and self._in_state_for() > 3.0:
                 self._transition(next_state)
 
     def _approach(self, next_state):
