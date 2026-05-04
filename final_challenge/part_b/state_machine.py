@@ -242,7 +242,7 @@ class StateMachine(Node):
         self._forward(self.latest_park_drive)
 
         # Transition based on distance to cone
-        if self.cone_distance is not None and self.cone_distance < 0.9:
+        if self.cone_distance is not None and self.cone_distance < 0.7:
             self.get_logger().info(f"Target distance reached: {self.cone_distance:.2f}m. Parking!")
             self._transition(next_state)
             return
