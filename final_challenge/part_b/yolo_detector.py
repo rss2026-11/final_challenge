@@ -61,8 +61,8 @@ class YoloAnnotatorNode(Node):
             .double_value
         )
 
-        self.red_pixel_fraction = self.declare_parameter("red_pixel_fraction", 0.08).get_parameter_value().double_value
-        self.traffic_light_min_area = self.declare_parameter("traffic_light_min_area", 200).get_parameter_value().integer_value
+        self.red_pixel_fraction = self.declare_parameter("red_pixel_fraction", 0.02).get_parameter_value().double_value
+        self.traffic_light_min_area = self.declare_parameter("traffic_light_min_area", 20).get_parameter_value().integer_value
 
         # Fraction of image height to ignore from the top (e.g. 1/3 means skip top third).
         # Detections whose bottom edge falls entirely above this cutoff are dropped.
@@ -222,14 +222,42 @@ class YoloAnnotatorNode(Node):
 
         return detections
 
+    # def _is_red(self, image: np.ndarray) -> bool:
+    #     if image.size == 0:
+    #         return False
+    #     hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+    #     m1 = cv2.inRange(hsv, np.array([0, 100, 100]), np.array([10, 255, 255]))
+    #     m2 = cv2.inRange(hsv, np.array([160, 100, 100]), np.array([179, 255, 255]))
+    #     red = m1 | m2
+    #     return (float(np.count_nonzero(red)) / float(red.size)) > self.red_pixel_fraction
+
     def _is_red(self, image: np.ndarray) -> bool:
         if image.size == 0:
             return False
+
+        # Only check the top 1/3 of the traffic light
+        h = image.shape[0]
+        image = image[0:int(h/3), :]
+
         hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
-        m1 = cv2.inRange(hsv, np.array([0, 100, 100]), np.array([10, 255, 255]))
-        m2 = cv2.inRange(hsv, np.array([160, 100, 100]), np.array([179, 255, 255]))
+
+        # Ignore very dark regions (unlit bulbs)
+        if np.mean(hsv[:,:,2]) < 50:
+            return False
+
+        # Balanced red thresholds
+        lower1 = np.array([0, 80, 80])
+        upper1 = np.array([12, 255, 255])
+        lower2 = np.array([165, 80, 80])
+        upper2 = np.array([179, 255, 255])
+
+        m1 = cv2.inRange(hsv, lower1, upper1)
+        m2 = cv2.inRange(hsv, lower2, upper2)
         red = m1 | m2
-        return (float(np.count_nonzero(red)) / float(red.size)) > self.red_pixel_fraction
+
+        red_fraction = np.count_nonzero(red) / red.size
+        return red_fraction > 0.02
+
 
     def draw_detections(
         self,
