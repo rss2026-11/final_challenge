@@ -227,17 +227,18 @@ class StateMachine(Node):
             if d < 1.0:
                 self._transition(next_state)
         else:
-            # Transition to parking controller as soon as the meter is seen.
-            # COOLDOWN: Wait until the car has physically traveled at least 2.0 meters 
-            # from the start of this NAV state. This prevents the car from immediately 
-            # re-parking at the exact same meter it just backed away from!
+            # COOLDOWN: Only apply the 2.0m driving cooldown if we are in NAV_2 to prevent
+            # re-parking at the exact same meter we just backed away from.
+            # In NAV_1, we want to park immediately when we see the meter!
             meter_visible = (self._now() - self.parking_meter_last_seen) < 0.5
             within_range = self.cone_distance is not None and self.cone_distance < 3.0
 
             dist_from_start = self._dist(self.current_pose, self.backup_start_pose) if (self.backup_start_pose and self.current_pose) else 0.0
+            
+            cooldown_passed = True if self.state == S.NAV_1 else (dist_from_start > 2.0)
 
-            if meter_visible and within_range and dist_from_start > 2.0:
-                self.get_logger().info(f"Cone dist {self.cone_distance:.2f}m < 4.0m. Transitioning to APPROACH!")
+            if meter_visible and within_range and cooldown_passed:
+                self.get_logger().info(f"Cone dist {self.cone_distance:.2f}m < 3.0m. Transitioning to APPROACH!")
                 self._transition(next_state)
 
     def _approach(self, next_state):
