@@ -234,7 +234,7 @@ class StateMachine(Node):
             within_range = self.cone_distance is not None and self.cone_distance < 3.0
 
             dist_from_start = self._dist(self.current_pose, self.backup_start_pose) if (self.backup_start_pose and self.current_pose) else 0.0
-            
+
             cooldown_passed = True if self.state == S.NAV_1 else (dist_from_start > 2.0)
 
             if meter_visible and within_range and cooldown_passed:
