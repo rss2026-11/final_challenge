@@ -6,7 +6,7 @@ part_b_state_machine:
     odom_topic: "/pf/pose/odom"
     parked_stable_sec: 2.0
     park_hold_sec: 5.0
-    return_to_start: false
+    return_to_start: true
     tick_hz: 20.0
 
 yolo_detector:

@@ -124,6 +124,7 @@ class StateMachine(Node):
         self.backup_start_pose = self.current_pose
         self.cone_distance = None
 
+
     def _dist(self, a, b):
         return math.hypot(a[0] - b[0], a[1] - b[1])
 
